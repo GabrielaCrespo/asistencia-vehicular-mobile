@@ -3,6 +3,7 @@ import 'emergencia_screen.dart';
 import 'vehiculos_screen.dart';
 import '../services/session_service.dart';
 import 'login_screen.dart';
+import 'perfil_screen.dart';
 
 class ClienteScreen extends StatefulWidget {
   @override
@@ -12,6 +13,8 @@ class ClienteScreen extends StatefulWidget {
 class _ClienteScreenState extends State<ClienteScreen> {
   String nombre = "";
   String email = "";
+int _selectedIndex = 0;
+
 
   @override
   void initState() {
@@ -34,7 +37,16 @@ class _ClienteScreenState extends State<ClienteScreen> {
       MaterialPageRoute(builder: (_) => LoginScreen()),
     );
   }
-
+void _onTabTapped(int index) {
+  if (index == 2) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => PerfilScreen()),
+    );
+  } else {
+    setState(() => _selectedIndex = index);
+  }
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -288,27 +300,28 @@ class _ClienteScreenState extends State<ClienteScreen> {
         ),
       ),
 
-      // MENU ABAJO
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: Colors.white,
-        selectedItemColor: Colors.black87,
-        unselectedItemColor: Colors.grey,
-        elevation: 10,
-        items: [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: "Inicio",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.history),
-            label: "Historial",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: "Perfil",
-          ),
-        ],
-      ),
+    bottomNavigationBar: BottomNavigationBar(
+  backgroundColor: Colors.white,
+  selectedItemColor: Colors.black87,
+  unselectedItemColor: Colors.grey,
+  elevation: 10,
+  currentIndex: _selectedIndex,
+  onTap: _onTabTapped,
+  items: [
+    BottomNavigationBarItem(
+      icon: Icon(Icons.home),
+      label: "Inicio",
+    ),
+    BottomNavigationBarItem(
+      icon: Icon(Icons.history),
+      label: "Historial",
+    ),
+    BottomNavigationBarItem(
+      icon: Icon(Icons.person),
+      label: "Perfil",
+    ),
+  ],
+),
     );
   }
 }
