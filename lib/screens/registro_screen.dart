@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
+import '../services/cliente_service.dart';
 
 class RegistroScreen extends StatefulWidget {
   @override
@@ -13,44 +14,69 @@ class _RegistroScreenState extends State<RegistroScreen> {
   final TextEditingController telefonoController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController confirmarPasswordController = TextEditingController();
+  final TextEditingController documentoController = TextEditingController();
 
-  void registrar() {
-    String nombre = nombreController.text.trim();
-    String apellido = apellidoController.text.trim();
-    String email = emailController.text.trim();
-    String telefono = telefonoController.text.trim();
-    String password = passwordController.text.trim();
-    String confirmar = confirmarPasswordController.text.trim();
+  void registrar() async {
+  String nombre = nombreController.text.trim();
+  String apellido = apellidoController.text.trim();
+  String email = emailController.text.trim();
+  String telefono = telefonoController.text.trim();
+  String password = passwordController.text.trim();
+  String confirmar = confirmarPasswordController.text.trim();
 
-    // Validar que no haya campos vacíos
-    if (nombre.isEmpty || apellido.isEmpty || email.isEmpty ||
-        telefono.isEmpty || password.isEmpty || confirmar.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Completa todos los campos")),
-      );
-      return;
-    }
-
-    // Validar que las contraseñas coincidan
-    if (password != confirmar) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Las contraseñas no coinciden")),
-      );
-      return;
-    }
-
-    // Por ahora simulado, luego llamará al backend
+  if (nombre.isEmpty || apellido.isEmpty || email.isEmpty ||
+      telefono.isEmpty || password.isEmpty || confirmar.isEmpty ||
+      documentoController.text.trim().isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Cuenta creada exitosamente")),
+      SnackBar(content: Text("Completa todos los campos")),
     );
+    return;
+  }
 
-    // Regresar al login después de registrarse
+  if (password != confirmar) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Las contraseñas no coinciden")),
+    );
+    return;
+  }
+
+  // Mostrar loading
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => Center(child: CircularProgressIndicator()),
+  );
+
+  final resultado = await ClienteService.registrar(
+    nombre: "$nombre $apellido",
+    email: email,
+    telefono: telefono,
+    password: password,
+    documentoIdentidad: "",
+  );
+
+  Navigator.pop(context);
+
+  if (resultado['success']) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Cuenta creada exitosamente"),
+        backgroundColor: Colors.green,
+      ),
+    );
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(builder: (_) => LoginScreen()),
     );
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(resultado['message']),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
-
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -133,7 +159,17 @@ class _RegistroScreenState extends State<RegistroScreen> {
                         prefixIcon: Icon(Icons.phone),
                       ),
                     ),
+SizedBox(height: 15),
 
+TextField(
+  controller: documentoController,
+  keyboardType: TextInputType.number,
+  decoration: InputDecoration(
+    labelText: "Documento de identidad",
+    prefixIcon: Icon(Icons.badge),
+    border: OutlineInputBorder(),
+  ),
+),
                     SizedBox(height: 15),
 
                     TextField(
