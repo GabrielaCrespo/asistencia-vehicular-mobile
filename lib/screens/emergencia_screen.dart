@@ -12,6 +12,21 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
   String ubicacion = "Santa Cruz - Bolivia";
   String imagen = "";
   bool audioGrabado = false;
+  String vehiculoSeleccionado = "";
+String tipoProblema = "";
+
+List<String> tiposProblema = [
+  "Batería",
+  "Llanta",
+  "Motor",
+  "Choque",
+  "Otros"
+];
+
+List<String> vehiculos = [
+  "Toyota Corolla - ABC-123",
+  "Honda Civic - XYZ-456",
+];
 
   void seleccionarImagen() {
     setState(() {
@@ -26,22 +41,36 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
   }
 
   void enviarEmergencia() {
-    String descripcion = descripcionController.text.trim();
+  String descripcion = descripcionController.text.trim();
 
-    if (descripcion.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Describe el problema")),
-      );
-      return;
-    }
-
+  if (vehiculoSeleccionado.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("Emergencia enviada correctamente"),
-        backgroundColor: Colors.green,
-      ),
+      SnackBar(content: Text("Selecciona un vehículo")),
     );
+    return;
   }
+
+  if (tipoProblema.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Selecciona el tipo de problema")),
+    );
+    return;
+  }
+
+  if (descripcion.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Describe el problema")),
+    );
+    return;
+  }
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text("Emergencia enviada correctamente"),
+      backgroundColor: Colors.green,
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -113,6 +142,112 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
             ),
 
             SizedBox(height: 20),
+            // SELECCIONAR VEHICULO
+Padding(
+  padding: EdgeInsets.symmetric(horizontal: 20),
+  child: Text(
+    "Vehículo afectado",
+    style: TextStyle(
+      fontSize: 15,
+      fontWeight: FontWeight.w600,
+      color: Colors.black87,
+    ),
+  ),
+),
+
+SizedBox(height: 10),
+
+Padding(
+  padding: EdgeInsets.symmetric(horizontal: 20),
+  child: Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(15),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.05),
+          blurRadius: 10,
+        ),
+      ],
+    ),
+    padding: EdgeInsets.symmetric(horizontal: 15),
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        isExpanded: true,
+        hint: Text("Selecciona tu vehículo"),
+        value: vehiculoSeleccionado.isEmpty ? null : vehiculoSeleccionado,
+        items: vehiculos.map((v) {
+          return DropdownMenuItem(
+            value: v,
+            child: Text(v),
+          );
+        }).toList(),
+        onChanged: (value) {
+          setState(() {
+            vehiculoSeleccionado = value!;
+          });
+        },
+      ),
+    ),
+  ),
+),
+
+SizedBox(height: 20),
+
+// TIPO DE PROBLEMA
+Padding(
+  padding: EdgeInsets.symmetric(horizontal: 20),
+  child: Text(
+    "Tipo de problema",
+    style: TextStyle(
+      fontSize: 15,
+      fontWeight: FontWeight.w600,
+      color: Colors.black87,
+    ),
+  ),
+),
+
+SizedBox(height: 10),
+
+Padding(
+  padding: EdgeInsets.symmetric(horizontal: 20),
+  child: Wrap(
+    spacing: 10,
+    runSpacing: 10,
+    children: tiposProblema.map((tipo) {
+      bool seleccionado = tipoProblema == tipo;
+      return GestureDetector(
+        onTap: () {
+          setState(() {
+            tipoProblema = tipo;
+          });
+        },
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: seleccionado ? Color(0xFFE53935) : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+              ),
+            ],
+          ),
+          child: Text(
+            tipo,
+            style: TextStyle(
+              color: seleccionado ? Colors.white : Colors.black87,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      );
+    }).toList(),
+  ),
+),
+
+SizedBox(height: 20),
 
             // DESCRIPCION
             Padding(
