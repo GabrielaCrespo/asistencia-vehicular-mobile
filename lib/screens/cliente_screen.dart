@@ -1,8 +1,40 @@
 import 'package:flutter/material.dart';
 import 'emergencia_screen.dart';
 import 'vehiculos_screen.dart';
+import '../services/session_service.dart';
+import 'login_screen.dart';
 
-class ClienteScreen extends StatelessWidget {
+class ClienteScreen extends StatefulWidget {
+  @override
+  _ClienteScreenState createState() => _ClienteScreenState();
+}
+
+class _ClienteScreenState extends State<ClienteScreen> {
+  String nombre = "";
+  String email = "";
+
+  @override
+  void initState() {
+    super.initState();
+    cargarSesion();
+  }
+
+  void cargarSesion() async {
+    final sesion = await SessionService.getSesion();
+    setState(() {
+      nombre = sesion['nombre'] ?? "Cliente";
+      email = sesion['email'] ?? "";
+    });
+  }
+
+  void cerrarSesion() async {
+    await SessionService.cerrarSesion();
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => LoginScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -10,6 +42,7 @@ class ClienteScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        automaticallyImplyLeading: false,
         title: Text(
           "Inicio",
           style: TextStyle(
@@ -19,12 +52,9 @@ class ClienteScreen extends StatelessWidget {
         ),
         centerTitle: true,
         actions: [
-          Padding(
-            padding: EdgeInsets.only(right: 15),
-            child: CircleAvatar(
-              backgroundColor: Colors.grey.shade200,
-              child: Icon(Icons.person, color: Colors.grey.shade700),
-            ),
+          IconButton(
+            icon: Icon(Icons.logout, color: Colors.grey),
+            onPressed: cerrarSesion,
           ),
         ],
       ),
@@ -49,7 +79,7 @@ class ClienteScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Hola, Bienvenido 👋",
+                    "Hola, ${nombre.split(' ')[0]} 👋",
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,

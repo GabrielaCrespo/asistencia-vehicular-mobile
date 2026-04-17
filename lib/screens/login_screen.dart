@@ -3,6 +3,8 @@ import 'cliente_screen.dart';
 import 'taller_screen.dart';
 import 'admin_screen.dart';
 import 'registro_screen.dart';  
+import '../services/cliente_service.dart';
+import '../services/session_service.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -13,8 +15,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-
-void login() {
+bool _passwordVisible = false;
+void login() async {
   String email = emailController.text.trim();
   String password = passwordController.text.trim();
 
@@ -25,13 +27,42 @@ void login() {
     return;
   }
 
-  // Por ahora simulado, luego llamará al backend
-  Navigator.push(
-    context,
-    MaterialPageRoute(builder: (_) => ClienteScreen()),
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => Center(child: CircularProgressIndicator()),
   );
+
+  final resultado = await ClienteService.login(
+    email: email,
+    password: password,
+  );
+
+  Navigator.pop(context);
+
+  if (resultado['success']) {
+    // Guardar sesión
+    final data = resultado['data'];
+    await SessionService.guardarSesion(
+      usuarioId: data['user']['usuario_id'],
+      nombre: data['user']['nombre'],
+      email: data['user']['email'],
+      token: data['access_token'],
+    );
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => ClienteScreen()),
+    );
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(resultado['message']),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
 }
-    
 
   @override
 Widget build(BuildContext context) {
@@ -84,16 +115,27 @@ Widget build(BuildContext context) {
                     ),
                   ),
 
-                  SizedBox(height: 20),
+                 SizedBox(height: 20),
 
-                  TextField(
-                    controller: passwordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: "Contraseña",
-                      prefixIcon: Icon(Icons.lock),
-                    ),
-                  ),
+TextField(
+  controller: passwordController,
+  obscureText: _passwordVisible ? false : true,
+  decoration: InputDecoration(
+    labelText: "Contraseña",
+    prefixIcon: Icon(Icons.lock),
+    suffixIcon: IconButton(
+      icon: Icon(
+        _passwordVisible ? Icons.visibility : Icons.visibility_off,
+        color: Colors.grey,
+      ),
+      onPressed: () {
+        setState(() {
+          _passwordVisible = !_passwordVisible;
+        });
+      },
+    ),
+  ),
+),
 
                   SizedBox(height: 30),
 
