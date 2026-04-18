@@ -1,7 +1,9 @@
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class EvidenciaService {
+  static const String baseUrl = 'http://127.0.0.1:8000';
   static final ImagePicker _picker = ImagePicker();
 
   // Seleccionar imagen desde galería
@@ -20,6 +22,7 @@ class EvidenciaService {
         'success': true,
         'path': imagen.path,
         'nombre': imagen.name,
+        'xfile': imagen,
       };
     } catch (e) {
       return {'success': false, 'message': 'Error: $e'};
@@ -42,9 +45,45 @@ class EvidenciaService {
         'success': true,
         'path': imagen.path,
         'nombre': imagen.name,
+        'xfile': imagen,
       };
     } catch (e) {
       return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+
+  // Subir imagen al backend
+  static Future<Map<String, dynamic>> subirImagen(XFile imagen) async {
+    try {
+      final bytes = await imagen.readAsBytes();
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/api/emergencia/subir-imagen'),
+      );
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'imagen',
+          bytes,
+          filename: imagen.name,
+        ),
+      );
+
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+      final data = jsonDecode(responseBody);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'imagen_path': data['imagen_path'],
+        };
+      } else {
+        return {'success': false, 'message': data['detail'] ?? 'Error al subir'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Error de conexión: $e'};
     }
   }
 }

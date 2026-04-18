@@ -12,6 +12,7 @@ class EmergenciaService {
     required double latitud,
     required double longitud,
     String? tipoProblema,
+     String? imagenPath, 
   }) async {
     try {
       final response = await http.post(
@@ -24,6 +25,7 @@ class EmergenciaService {
           'latitud': latitud,
           'longitud': longitud,
           'tipo_problema': tipoProblema,
+          'imagen_path': imagenPath, 
         }),
       );
 
@@ -58,4 +60,23 @@ class EmergenciaService {
       return {'success': false, 'message': 'Error de conexión'};
     }
   }
+  // OBTENER DETALLE
+static Future<Map<String, dynamic>> obtenerDetalle(int incidenteId) async {
+  try {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/emergencia/detalle/$incidenteId'),
+      headers: {'Content-Type': 'application/json'},
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return {'success': true, 'incidente': data['incidente']};
+    } else {
+      return {'success': false, 'message': data['detail'] ?? 'Error'};
+    }
+  } catch (e) {
+    return {'success': false, 'message': 'Error de conexión'};
+  }
+}
 }

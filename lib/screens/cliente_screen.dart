@@ -4,6 +4,8 @@ import 'vehiculos_screen.dart';
 import '../services/session_service.dart';
 import 'login_screen.dart';
 import 'perfil_screen.dart';
+import '../services/emergencia_service.dart';
+import 'seguimiento_screen.dart';
 
 class ClienteScreen extends StatefulWidget {
   @override
@@ -13,8 +15,8 @@ class ClienteScreen extends StatefulWidget {
 class _ClienteScreenState extends State<ClienteScreen> {
   String nombre = "";
   String email = "";
-int _selectedIndex = 0;
-
+  int _selectedIndex = 0;
+  List<Map<String, dynamic>> emergencias = [];
 
   @override
   void initState() {
@@ -28,6 +30,15 @@ int _selectedIndex = 0;
       nombre = sesion['nombre'] ?? "Cliente";
       email = sesion['email'] ?? "";
     });
+
+    // Cargar emergencias activas
+    final usuarioId = sesion['usuario_id'] ?? 0;
+    final resultado = await EmergenciaService.listar(usuarioId);
+    if (resultado['success']) {
+      setState(() {
+        emergencias = List<Map<String, dynamic>>.from(resultado['emergencias']);
+      });
+    }
   }
 
   void cerrarSesion() async {
@@ -37,16 +48,18 @@ int _selectedIndex = 0;
       MaterialPageRoute(builder: (_) => LoginScreen()),
     );
   }
-void _onTabTapped(int index) {
-  if (index == 2) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => PerfilScreen()),
-    );
-  } else {
-    setState(() => _selectedIndex = index);
+
+  void _onTabTapped(int index) {
+    if (index == 2) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => PerfilScreen()),
+      );
+    } else {
+      setState(() => _selectedIndex = index);
+    }
   }
-}
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -57,10 +70,7 @@ void _onTabTapped(int index) {
         automaticallyImplyLeading: false,
         title: Text(
           "Inicio",
-          style: TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
         actions: [
@@ -75,7 +85,6 @@ void _onTabTapped(int index) {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
             // HEADER
             Container(
               width: double.infinity,
@@ -155,7 +164,11 @@ void _onTabTapped(int index) {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.warning_rounded, color: Colors.white, size: 40),
+                      Icon(
+                        Icons.warning_rounded,
+                        color: Colors.white,
+                        size: 40,
+                      ),
                       SizedBox(height: 8),
                       Text(
                         "EMERGENCIA",
@@ -186,57 +199,146 @@ void _onTabTapped(int index) {
                 ),
               ),
             ),
-
             SizedBox(height: 10),
 
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 10,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: EdgeInsets.all(10),
+              child: emergencias.isEmpty
+                  ? Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.all(18),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(10),
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(15),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                          ),
+                        ],
                       ),
-                      child: Icon(Icons.inbox, color: Colors.grey),
-                    ),
-                    SizedBox(width: 15),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Sin solicitudes activas",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(Icons.inbox, color: Colors.grey),
                           ),
-                        ),
-                        Text(
-                          "Presiona emergencia para solicitar ayuda",
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
+                          SizedBox(width: 15),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Sin solicitudes activas",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              Text(
+                                "Presiona emergencia para solicitar ayuda",
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    )
+                  : Column(
+                      children: emergencias.take(2).map((e) {
+                        return GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => SeguimientoScreen(
+                                  incidenteId: e['incidente_id'],
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            margin: EdgeInsets.only(bottom: 10),
+                            padding: EdgeInsets.all(15),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(15),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.05),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: e['estado'] == 'pendiente'
+                                        ? Colors.orange.shade50
+                                        : e['estado'] == 'en_proceso'
+                                        ? Colors.blue.shade50
+                                        : Colors.green.shade50,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    e['estado'] == 'pendiente'
+                                        ? Icons.access_time
+                                        : e['estado'] == 'en_proceso'
+                                        ? Icons.build
+                                        : Icons.check_circle,
+                                    color: e['estado'] == 'pendiente'
+                                        ? Colors.orange
+                                        : e['estado'] == 'en_proceso'
+                                        ? Colors.blue
+                                        : Colors.green,
+                                  ),
+                                ),
+                                SizedBox(width: 15),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "Emergencia #${e['incidente_id']}",
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                      Text(
+                                        e['estado'] == 'pendiente'
+                                            ? "Buscando taller..."
+                                            : e['estado'] == 'en_proceso'
+                                            ? "En proceso"
+                                            : "Atendido",
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.arrow_forward_ios,
+                                  size: 16,
+                                  color: Colors.grey,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
-                  ],
-                ),
-              ),
             ),
 
             SizedBox(height: 25),
@@ -283,7 +385,11 @@ void _onTabTapped(int index) {
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                   subtitle: Text("Gestiona tus vehículos registrados"),
-                  trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                  trailing: Icon(
+                    Icons.arrow_forward_ios,
+                    size: 16,
+                    color: Colors.grey,
+                  ),
                   onTap: () {
                     Navigator.push(
                       context,
@@ -295,33 +401,26 @@ void _onTabTapped(int index) {
             ),
 
             SizedBox(height: 30),
-
           ],
         ),
       ),
 
-    bottomNavigationBar: BottomNavigationBar(
-  backgroundColor: Colors.white,
-  selectedItemColor: Colors.black87,
-  unselectedItemColor: Colors.grey,
-  elevation: 10,
-  currentIndex: _selectedIndex,
-  onTap: _onTabTapped,
-  items: [
-    BottomNavigationBarItem(
-      icon: Icon(Icons.home),
-      label: "Inicio",
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(Icons.history),
-      label: "Historial",
-    ),
-    BottomNavigationBarItem(
-      icon: Icon(Icons.person),
-      label: "Perfil",
-    ),
-  ],
-),
+      bottomNavigationBar: BottomNavigationBar(
+        backgroundColor: Colors.white,
+        selectedItemColor: Colors.black87,
+        unselectedItemColor: Colors.grey,
+        elevation: 10,
+        currentIndex: _selectedIndex,
+        onTap: _onTabTapped,
+        items: [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Inicio"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.history),
+            label: "Historial",
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Perfil"),
+        ],
+      ),
     );
   }
 }
