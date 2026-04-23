@@ -131,71 +131,73 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
   }
 
   void enviarEmergencia() async {
-  if (vehiculoSeleccionadoId == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Selecciona un vehículo")),
+    if (vehiculoSeleccionadoId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Selecciona un vehículo")));
+      return;
+    }
+
+    if (tipoProblema.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Selecciona el tipo de problema")));
+      return;
+    }
+
+    if (descripcionController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Describe el problema")));
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Center(child: CircularProgressIndicator()),
     );
-    return;
-  }
 
-  if (tipoProblema.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Selecciona el tipo de problema")),
+    // Subir imagen si hay una seleccionada
+    String? imagenPath;
+    if (imagenSeleccionada != null) {
+      final resultadoImagen = await EvidenciaService.subirImagen(
+        imagenSeleccionada!,
+      );
+      if (resultadoImagen['success']) {
+        imagenPath = resultadoImagen['imagen_path'];
+      }
+    }
+
+    final resultado = await EmergenciaService.registrar(
+      usuarioId: usuarioId,
+      vehiculoId: vehiculoSeleccionadoId!,
+      descripcion: descripcionController.text.trim(),
+      latitud: latitud,
+      longitud: longitud,
+      tipoProblema: tipoProblema,
+      imagenPath: imagenPath,
     );
-    return;
-  }
 
-  if (descripcionController.text.trim().isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Describe el problema")),
-    );
-    return;
-  }
+    Navigator.pop(context);
 
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => Center(child: CircularProgressIndicator()),
-  );
-
-  // Subir imagen si hay una seleccionada
-  String? imagenPath;
-  if (imagenSeleccionada != null) {
-    final resultadoImagen = await EvidenciaService.subirImagen(imagenSeleccionada!);
-    if (resultadoImagen['success']) {
-      imagenPath = resultadoImagen['imagen_path'];
+    if (resultado['success']) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Emergencia registrada correctamente"),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.pop(context);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(resultado['message']),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
-
-  final resultado = await EmergenciaService.registrar(
-    usuarioId: usuarioId,
-    vehiculoId: vehiculoSeleccionadoId!,
-    descripcion: descripcionController.text.trim(),
-    latitud: latitud,
-    longitud: longitud,
-    tipoProblema: tipoProblema,
-    imagenPath: imagenPath,
-  );
-
-  Navigator.pop(context);
-
-  if (resultado['success']) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("Emergencia registrada correctamente"),
-        backgroundColor: Colors.green,
-      ),
-    );
-    Navigator.pop(context);
-  } else {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(resultado['message']),
-        backgroundColor: Colors.red,
-      ),
-    );
-  }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -635,7 +637,27 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                         subtitle: Text(ubicacion),
-                        trailing: Icon(Icons.my_location, color: Colors.grey),
+                        trailing: Icon(Icons.my_location, color: Colors.blue),
+                        onTap: () async {
+                          final resultado =
+                              await UbicacionService.obtenerUbicacion();
+                          if (resultado['success']) {
+                            setState(() {
+                              latitud = resultado['latitud'];
+                              longitud = resultado['longitud'];
+                              ubicacion =
+                                  "Lat: ${latitud.toStringAsFixed(4)}, Lng: ${longitud.toStringAsFixed(4)}";
+                            });
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  "No se pudo obtener la ubicación",
+                                ),
+                              ),
+                            );
+                          }
+                        },
                       ),
                     ),
                   ),
