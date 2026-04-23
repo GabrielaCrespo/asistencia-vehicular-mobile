@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import '../models/cliente_model.dart';
 
 class ClienteService {
-  static const String baseUrl = 'https://asistencia-vehicular-backend.onrender.com';
+  static const String baseUrl = 'https://asistencia-vehicular-backend-3ii1.onrender.com';
   // REGISTRO
   static Future<Map<String, dynamic>> registrar({
     required String nombre,
