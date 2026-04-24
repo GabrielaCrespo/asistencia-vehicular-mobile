@@ -7,6 +7,7 @@ import '../services/emergencia_service.dart';
 import '../services/vehiculo_service.dart';
 import '../services/session_service.dart';
 import '../services/ubicacion_service.dart';
+import '../services/audio_service.dart';
 
 class EmergenciaScreen extends StatefulWidget {
   @override
@@ -22,6 +23,8 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
   String imagen = "";
   XFile? imagenSeleccionada;
   bool audioGrabado = false;
+  bool grabando = false;
+  String? rutaAudio;
   String tipoProblema = "";
   int? vehiculoSeleccionadoId;
   String vehiculoSeleccionadoNombre = "";
@@ -124,10 +127,29 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
     );
   }
 
-  void grabarAudio() {
-    setState(() {
-      audioGrabado = !audioGrabado;
-    });
+  void grabarAudio() async {
+    if (!grabando) {
+      final resultado = await AudioService.iniciarGrabacion();
+      if (resultado['success']) {
+        setState(() {
+          grabando = true;
+          audioGrabado = false;
+        });
+      } else {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(resultado['message'])));
+      }
+    } else {
+      final resultado = await AudioService.detenerGrabacion();
+      if (resultado['success']) {
+        setState(() {
+          grabando = false;
+          audioGrabado = true;
+          rutaAudio = resultado['path'];
+        });
+      }
+    }
   }
 
   void enviarEmergencia() async {
@@ -159,25 +181,33 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
     );
 
     // Subir imagen si hay una seleccionada
-    String? imagenPath;
-    if (imagenSeleccionada != null) {
-      final resultadoImagen = await EvidenciaService.subirImagen(
-        imagenSeleccionada!,
-      );
-      if (resultadoImagen['success']) {
-        imagenPath = resultadoImagen['imagen_path'];
-      }
-    }
+String? imagenPath;
+if (imagenSeleccionada != null) {
+  final resultadoImagen = await EvidenciaService.subirImagen(imagenSeleccionada!);
+  if (resultadoImagen['success']) {
+    imagenPath = resultadoImagen['imagen_path'];
+  }
+}
+
+// Subir audio si hay uno grabado
+String? audioPath;
+if (rutaAudio != null) {
+  final resultadoAudio = await EvidenciaService.subirAudio(rutaAudio!);
+  if (resultadoAudio['success']) {
+    audioPath = resultadoAudio['audio_path'];
+  }
+}
 
     final resultado = await EmergenciaService.registrar(
-      usuarioId: usuarioId,
-      vehiculoId: vehiculoSeleccionadoId!,
-      descripcion: descripcionController.text.trim(),
-      latitud: latitud,
-      longitud: longitud,
-      tipoProblema: tipoProblema,
-      imagenPath: imagenPath,
-    );
+  usuarioId: usuarioId,
+  vehiculoId: vehiculoSeleccionadoId!,
+  descripcion: descripcionController.text.trim(),
+  latitud: latitud,
+  longitud: longitud,
+  tipoProblema: tipoProblema,
+  imagenPath: imagenPath,
+  audioPath: audioPath, // 👈 línea nueva
+);
 
     Navigator.pop(context);
 
@@ -550,7 +580,9 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
                             child: Container(
                               height: 120,
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: grabando
+                                    ? Colors.red.shade50
+                                    : Colors.white,
                                 borderRadius: BorderRadius.circular(15),
                                 boxShadow: [
                                   BoxShadow(
@@ -563,21 +595,29 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(
-                                    audioGrabado
+                                    grabando
+                                        ? Icons.stop_circle
+                                        : audioGrabado
                                         ? Icons.check_circle
                                         : Icons.mic,
                                     size: 35,
-                                    color: audioGrabado
+                                    color: grabando
+                                        ? Colors.red
+                                        : audioGrabado
                                         ? Colors.green
                                         : Colors.grey,
                                   ),
                                   SizedBox(height: 8),
                                   Text(
-                                    audioGrabado
+                                    grabando
+                                        ? "Toca para detener"
+                                        : audioGrabado
                                         ? "Audio grabado"
                                         : "Grabar audio",
                                     style: TextStyle(
-                                      color: audioGrabado
+                                      color: grabando
+                                          ? Colors.red
+                                          : audioGrabado
                                           ? Colors.green
                                           : Colors.grey,
                                       fontSize: 13,

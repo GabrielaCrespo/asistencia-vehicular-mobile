@@ -13,6 +13,7 @@ class EmergenciaService {
     required double longitud,
     String? tipoProblema,
      String? imagenPath, 
+      String? audioPath,
   }) async {
     try {
       final response = await http.post(
