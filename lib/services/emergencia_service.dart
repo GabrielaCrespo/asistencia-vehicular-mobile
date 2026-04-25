@@ -28,6 +28,7 @@ class EmergenciaService {
           'longitud': longitud,
           'tipo_problema': tipoProblema,
           'imagen_path': imagenPath, 
+          'audio_path': audioPath,          
         }),
       );
 

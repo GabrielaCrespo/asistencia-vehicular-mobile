@@ -5,6 +5,7 @@ import 'admin_screen.dart';
 import 'registro_screen.dart';  
 import '../services/cliente_service.dart';
 import '../services/session_service.dart';
+import 'login_tecnico_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -152,6 +153,18 @@ TextField(
     );
   },
   child: Text("¿No tienes cuenta? Regístrate"),
+),
+TextButton(
+  onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => LoginTecnicoScreen()),
+    );
+  },
+  child: Text(
+    "¿Eres técnico? Ingresa aquí",
+    style: TextStyle(color: Colors.blue.shade700),
+  ),
 ),
                 ],
               ),
