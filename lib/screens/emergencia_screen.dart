@@ -8,6 +8,7 @@ import '../services/vehiculo_service.dart';
 import '../services/session_service.dart';
 import '../services/ubicacion_service.dart';
 import '../services/audio_service.dart';
+import 'talleres_screen.dart';
 
 class EmergenciaScreen extends StatefulWidget {
   @override
@@ -181,44 +182,50 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
     );
 
     // Subir imagen si hay una seleccionada
-String? imagenPath;
-if (imagenSeleccionada != null) {
-  final resultadoImagen = await EvidenciaService.subirImagen(imagenSeleccionada!);
-  if (resultadoImagen['success']) {
-    imagenPath = resultadoImagen['imagen_path'];
-  }
-}
+    String? imagenPath;
+    if (imagenSeleccionada != null) {
+      final resultadoImagen = await EvidenciaService.subirImagen(
+        imagenSeleccionada!,
+      );
+      if (resultadoImagen['success']) {
+        imagenPath = resultadoImagen['imagen_path'];
+      }
+    }
 
-// Subir audio si hay uno grabado
-String? audioPath;
-if (rutaAudio != null) {
-  final resultadoAudio = await EvidenciaService.subirAudio(rutaAudio!);
-  if (resultadoAudio['success']) {
-    audioPath = resultadoAudio['audio_path'];
-  }
-}
+    // Subir audio si hay uno grabado
+    String? audioPath;
+    if (rutaAudio != null) {
+      final resultadoAudio = await EvidenciaService.subirAudio(rutaAudio!);
+      if (resultadoAudio['success']) {
+        audioPath = resultadoAudio['audio_path'];
+      }
+    }
 
     final resultado = await EmergenciaService.registrar(
-  usuarioId: usuarioId,
-  vehiculoId: vehiculoSeleccionadoId!,
-  descripcion: descripcionController.text.trim(),
-  latitud: latitud,
-  longitud: longitud,
-  tipoProblema: tipoProblema,
-  imagenPath: imagenPath,
-  audioPath: audioPath, // 👈 línea nueva
-);
+      usuarioId: usuarioId,
+      vehiculoId: vehiculoSeleccionadoId!,
+      descripcion: descripcionController.text.trim(),
+      latitud: latitud,
+      longitud: longitud,
+      tipoProblema: tipoProblema,
+      imagenPath: imagenPath,
+      audioPath: audioPath, // 👈 línea nueva
+    );
 
     Navigator.pop(context);
 
     if (resultado['success']) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Emergencia registrada correctamente"),
-          backgroundColor: Colors.green,
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TalleresScreen(
+            latitud: latitud,
+            longitud: longitud,
+            tipoProblema: tipoProblema,
+            incidenteId: resultado['data']['incidente_id'],
+          ),
         ),
       );
-      Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
