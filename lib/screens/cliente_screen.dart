@@ -6,6 +6,7 @@ import 'login_screen.dart';
 import 'perfil_screen.dart';
 import '../services/emergencia_service.dart';
 import 'seguimiento_screen.dart';
+import 'historial_screen.dart';
 
 class ClienteScreen extends StatefulWidget {
   @override
@@ -50,7 +51,12 @@ class _ClienteScreenState extends State<ClienteScreen> {
   }
 
   void _onTabTapped(int index) {
-    if (index == 2) {
+    if (index == 1) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => HistorialScreen()),
+      );
+    } else if (index == 2) {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => PerfilScreen()),
