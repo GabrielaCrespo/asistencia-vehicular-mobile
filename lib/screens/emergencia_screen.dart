@@ -194,12 +194,12 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
 
     // Subir audio si hay uno grabado
     String? audioPath;
-    if (rutaAudio != null) {
-      final resultadoAudio = await EvidenciaService.subirAudio(rutaAudio!);
-      if (resultadoAudio['success']) {
-        audioPath = resultadoAudio['audio_path'];
-      }
-    }
+if (rutaAudio != null && rutaAudio!.isNotEmpty) {
+  final resultadoAudio = await EvidenciaService.subirAudio(rutaAudio!);
+  if (resultadoAudio['success']) {
+    audioPath = resultadoAudio['audio_path'];
+  }
+}
 
     final resultado = await EmergenciaService.registrar(
       usuarioId: usuarioId,

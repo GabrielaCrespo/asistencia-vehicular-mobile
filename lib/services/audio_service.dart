@@ -37,7 +37,11 @@ class AudioService {
   static Future<Map<String, dynamic>> detenerGrabacion() async {
     try {
       final ruta = await _recorder.stop();
-      return {'success': true, 'path': ruta ?? ''};
+      // Verificar que la ruta sea válida
+      if (ruta == null || ruta.isEmpty) {
+        return {'success': false, 'message': 'No se pudo obtener la ruta del audio'};
+      }
+      return {'success': true, 'path': ruta};
     } catch (e) {
       return {'success': false, 'message': 'Error: $e'};
     }
