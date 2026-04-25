@@ -193,14 +193,21 @@ class _EmergenciaScreenState extends State<EmergenciaScreen> {
     }
 
     // Subir audio si hay uno grabado
-    String? audioPath;
+   // Subir audio si hay uno grabado
+String? audioPath;
+print("=== DEBUG AUDIO ===");
+print("rutaAudio: $rutaAudio");
 if (rutaAudio != null && rutaAudio!.isNotEmpty) {
+  print("Intentando subir audio...");
   final resultadoAudio = await EvidenciaService.subirAudio(rutaAudio!);
+  print("Resultado audio: $resultadoAudio");
   if (resultadoAudio['success']) {
     audioPath = resultadoAudio['audio_path'];
+    print("Audio path: $audioPath");
   }
+} else {
+  print("rutaAudio es null o vacío");
 }
-
     final resultado = await EmergenciaService.registrar(
       usuarioId: usuarioId,
       vehiculoId: vehiculoSeleccionadoId!,
