@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'dart:convert';
+import 'dart:async';
 import '../services/tecnico_service.dart';
+import '../services/session_service.dart';
 
 class TecnicoAsignacionScreen extends StatefulWidget {
   final Map<String, dynamic> asignacion;
@@ -23,31 +31,117 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
   String metodoPago = "efectivo";
   bool procesando = false;
 
+  // GPS
+  WebSocketChannel? _channel;
+  Timer? _gpsTimer;
+  bool _enviandoUbicacion = false;
+
+  // Mapa
+  MapController _mapController = MapController();
+  LatLng? _tecnicoUbicacion;
+  LatLng? _clienteUbicacion;
+
+  @override
+  void initState() {
+    super.initState();
+    // Cargar ubicación del cliente
+    if (widget.asignacion['latitud'] != null) {
+      _clienteUbicacion = LatLng(
+        double.parse(widget.asignacion['latitud'].toString()),
+        double.parse(widget.asignacion['longitud'].toString()),
+      );
+    }
+    if (widget.asignacion['estado'] == 'en_camino') {
+      _iniciarEnvioUbicacion();
+    }
+  }
+
+  @override
+  void dispose() {
+    _gpsTimer?.cancel();
+    _channel?.sink.close();
+    super.dispose();
+  }
+
+  Future<void> _abrirRutaEnMaps() async {
+    final lat = widget.asignacion['latitud'];
+    final lng = widget.asignacion['longitud'];
+    if (lat == null || lng == null) return;
+    final url = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving');
+    await launchUrl(url, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _iniciarEnvioUbicacion() async {
+    LocationPermission permiso = await Geolocator.checkPermission();
+    if (permiso == LocationPermission.denied) {
+      permiso = await Geolocator.requestPermission();
+      if (permiso == LocationPermission.denied) return;
+    }
+
+    final sesion = await SessionService.getSesion();
+    final token = sesion['token'] ?? '';
+    if (token.isEmpty) return;
+
+    try {
+      _channel = WebSocketChannel.connect(
+        Uri.parse('wss://asistencia-vehicular-backend.onrender.com/ws?token=$token'),
+      );
+      setState(() => _enviandoUbicacion = true);
+
+      _gpsTimer = Timer.periodic(Duration(seconds: 10), (_) async {
+        try {
+          final pos = await Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.high);
+          setState(() {
+            _tecnicoUbicacion = LatLng(pos.latitude, pos.longitude);
+          });
+          _mapController.move(_tecnicoUbicacion!, 15);
+
+          if (_channel != null) {
+            _channel!.sink.add(jsonEncode({
+              'tipo': 'ubicacion_tecnico',
+              'incidente_id': widget.asignacion['incidente_id'],
+              'latitud': pos.latitude,
+              'longitud': pos.longitude,
+            }));
+          }
+        } catch (e) {
+          print('[GPS] Error: $e');
+        }
+      });
+    } catch (e) {
+      print('[WS] Error: $e');
+    }
+  }
+
+  void _detenerEnvioUbicacion() {
+    _gpsTimer?.cancel();
+    _channel?.sink.close();
+    _channel = null;
+    setState(() => _enviandoUbicacion = false);
+  }
+
   Future<void> actualizarEstado(String estado) async {
     setState(() => procesando = true);
-
     final resultado = await TecnicoService.actualizarEstado(
       asignacionId: widget.asignacion['asignacion_id'],
       estado: estado,
     );
-
     setState(() => procesando = false);
 
     if (resultado['success']) {
+      if (estado == 'en_camino') await _iniciarEnvioUbicacion();
+      if (estado == 'en_servicio') _detenerEnvioUbicacion();
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Estado actualizado correctamente"),
-          backgroundColor: Colors.green,
-        ),
+        SnackBar(content: Text("Estado actualizado"), backgroundColor: Colors.green),
       );
       widget.onActualizar();
       Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(resultado['message']),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(resultado['message']), backgroundColor: Colors.red),
       );
     }
   }
@@ -57,9 +151,7 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (context, setStateDialog) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           title: Text("Finalizar servicio"),
           content: SingleChildScrollView(
             child: Column(
@@ -71,43 +163,32 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
                   decoration: InputDecoration(
                     labelText: "Monto cobrado (Bs.)",
                     prefixIcon: Icon(Icons.attach_money),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
-
                 SizedBox(height: 15),
-
                 TextField(
                   controller: observacionesController,
                   maxLines: 3,
                   decoration: InputDecoration(
-                    labelText: "Observaciones del servicio",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    labelText: "Observaciones",
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
-
                 SizedBox(height: 15),
-
                 DropdownButtonFormField<String>(
                   value: metodoPago,
                   decoration: InputDecoration(
                     labelText: "Método de pago",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   items: [
                     DropdownMenuItem(value: "efectivo", child: Text("Efectivo")),
                     DropdownMenuItem(value: "transferencia", child: Text("Transferencia")),
                     DropdownMenuItem(value: "qr", child: Text("QR")),
                   ],
-                  onChanged: (value) => setStateDialog(() => metodoPago = value!),
+                  onChanged: (v) => setStateDialog(() => metodoPago = v!),
                 ),
-
                 if (metodoPago == 'qr') ...[
                   SizedBox(height: 15),
                   Container(
@@ -117,31 +198,18 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: Colors.grey.shade300),
                     ),
-                    child: Column(
-                      children: [
-                        Text(
-                          "Escanea el QR para pagar",
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                        SizedBox(height: 10),
-                        Image.network(
-                          'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=AsistenciaVehicular-Pago',
-                          width: 150,
-                          height: 150,
-                          errorBuilder: (_, __, ___) => Container(
-                            width: 150,
-                            height: 150,
-                            color: Colors.grey.shade200,
-                            child: Icon(Icons.qr_code, size: 80, color: Colors.grey),
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text("Asistencia Vehicular", style: TextStyle(color: Colors.grey, fontSize: 12)),
-                      ],
-                    ),
+                    child: Column(children: [
+                      Text("Escanea el QR para pagar",
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      SizedBox(height: 10),
+                      Image.network(
+                        'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=AsistenciaVehicular-Pago',
+                        width: 150, height: 150,
+                        errorBuilder: (_, __, ___) => Icon(Icons.qr_code, size: 80, color: Colors.grey),
+                      ),
+                    ]),
                   ),
                 ],
-
                 if (metodoPago == 'transferencia') ...[
                   SizedBox(height: 15),
                   Container(
@@ -149,21 +217,17 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
                     decoration: BoxDecoration(
                       color: Colors.blue.shade50,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.blue.shade200),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          "Datos para transferencia",
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blue.shade800),
-                        ),
-                        SizedBox(height: 10),
-                        _infoTransferencia("Banco", "Banco Nacional de Bolivia"),
-                        _infoTransferencia("Titular", "Asistencia Vehicular S.R.L."),
-                        _infoTransferencia("Cuenta", "1234567890"),
-                        _infoTransferencia("NIT", "987654321"),
-                        _infoTransferencia("Referencia", "Servicio #${widget.asignacion['asignacion_id']}"),
+                        Text("Datos para transferencia",
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        SizedBox(height: 8),
+                        _infoRow("Banco", "Banco Nacional de Bolivia"),
+                        _infoRow("Titular", "Asistencia Vehicular S.R.L."),
+                        _infoRow("Cuenta", "1234567890"),
+                        _infoRow("Referencia", "Servicio #${widget.asignacion['asignacion_id']}"),
                       ],
                     ),
                   ),
@@ -178,18 +242,9 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (montoController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Ingresa el monto cobrado")),
-                  );
-                  return;
-                }
-
-                // Cerrar diálogo
+                if (montoController.text.trim().isEmpty) return;
                 Navigator.of(context).pop();
-
                 setState(() => procesando = true);
-
                 final resultado = await TecnicoService.registrarPago(
                   asignacionId: widget.asignacion['asignacion_id'],
                   tallerId: widget.tallerId,
@@ -197,27 +252,18 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
                   observaciones: observacionesController.text.trim(),
                   metodoPago: metodoPago,
                 );
-
                 setState(() => procesando = false);
-
                 if (resultado['success']) {
+                  _detenerEnvioUbicacion();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text("Servicio finalizado correctamente"),
-                      backgroundColor: Colors.green,
-                      duration: Duration(seconds: 2),
-                    ),
+                    SnackBar(content: Text("Servicio finalizado"), backgroundColor: Colors.green),
                   );
                   await Future.delayed(Duration(seconds: 2));
                   widget.onActualizar();
-                  // Cerrar pantalla de asignacion
                   Navigator.of(context).pop();
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(resultado['message']),
-                      backgroundColor: Colors.red,
-                    ),
+                    SnackBar(content: Text(resultado['message']), backgroundColor: Colors.red),
                   );
                 }
               },
@@ -233,27 +279,30 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
     );
   }
 
-  Widget _infoTransferencia(String label, String valor) {
+  Widget _infoRow(String label, String valor) {
     return Padding(
       padding: EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "$label: ",
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.blue.shade700),
-          ),
-          Expanded(
-            child: Text(valor, style: TextStyle(fontSize: 12, color: Colors.black87)),
-          ),
-        ],
-      ),
+      child: Row(children: [
+        Text("$label: ", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.blue.shade700)),
+        Expanded(child: Text(valor, style: TextStyle(fontSize: 12))),
+      ]),
     );
+  }
+
+  Color _colorEstado(String estado) {
+    switch (estado) {
+      case 'aceptada': return Colors.blue;
+      case 'en_camino': return Colors.orange;
+      case 'en_servicio': return Colors.purple;
+      case 'completada': return Colors.green;
+      default: return Colors.grey;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final a = widget.asignacion;
+    final estado = a['estado'] ?? '';
 
     return Scaffold(
       backgroundColor: Color(0xFFF5F5F5),
@@ -264,11 +313,20 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
           icon: Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          "Detalle del Servicio",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
+        title: Text("Detalle del Servicio",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         centerTitle: true,
+        actions: [
+          if (_enviandoUbicacion)
+            Padding(
+              padding: EdgeInsets.only(right: 12),
+              child: Row(children: [
+                Icon(Icons.gps_fixed, color: Colors.greenAccent, size: 16),
+                SizedBox(width: 4),
+                Text("GPS", style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
+              ]),
+            ),
+        ],
       ),
 
       body: procesando
@@ -276,8 +334,7 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
           : SingleChildScrollView(
               child: Column(
                 children: [
-
-                  // HEADER ESTADO
+                  // HEADER
                   Container(
                     width: double.infinity,
                     padding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
@@ -288,160 +345,233 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
                         bottomRight: Radius.circular(30),
                       ),
                     ),
-                    child: Column(
-                      children: [
-                        Text(
-                          "Servicio #${a['asignacion_id']}",
-                          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    child: Column(children: [
+                      Text("Servicio #${a['asignacion_id']}",
+                          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                      SizedBox(height: 8),
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: _colorEstado(estado).withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                        SizedBox(height: 5),
-                        Container(
-                          padding: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: Colors.white24,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            a['estado'].toString().toUpperCase(),
-                            style: TextStyle(color: Colors.white, fontSize: 13),
-                          ),
-                        ),
+                        child: Text(estado.toUpperCase(),
+                            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                      ),
+                      if (_enviandoUbicacion) ...[
+                        SizedBox(height: 8),
+                        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          Icon(Icons.gps_fixed, color: Colors.greenAccent, size: 14),
+                          SizedBox(width: 5),
+                          Text("Enviando ubicación en tiempo real",
+                              style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
+                        ]),
                       ],
-                    ),
+                    ]),
                   ),
 
                   SizedBox(height: 20),
 
-                  // INFO CLIENTE
+                  // MAPA CON RUTA (visible cuando está en camino)
+                  if (estado == 'en_camino' || estado == 'en_servicio')
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 20),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(15),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: EdgeInsets.all(15),
+                              child: Row(children: [
+                                Icon(Icons.map, color: Colors.blue),
+                                SizedBox(width: 8),
+                                Text("Ruta hacia el cliente",
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                Spacer(),
+                                // Leyenda
+                                Row(children: [
+                                  Icon(Icons.directions_car, color: Colors.blue, size: 16),
+                                  SizedBox(width: 4),
+                                  Text("Tú", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                  SizedBox(width: 10),
+                                  Icon(Icons.location_on, color: Colors.red, size: 16),
+                                  SizedBox(width: 4),
+                                  Text("Cliente", style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                ]),
+                              ]),
+                            ),
+                            ClipRRect(
+                              borderRadius: BorderRadius.only(
+                                bottomLeft: Radius.circular(15),
+                                bottomRight: Radius.circular(15),
+                              ),
+                              child: SizedBox(
+                                height: 280,
+                                child: FlutterMap(
+                                  mapController: _mapController,
+                                  options: MapOptions(
+                                    initialCenter: _clienteUbicacion ?? LatLng(-17.7833, -63.1821),
+                                    initialZoom: 14,
+                                  ),
+                                  children: [
+                                    TileLayer(
+                                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                      userAgentPackageName: 'com.example.mobile_app',
+                                    ),
+                                    MarkerLayer(
+                                      markers: [
+                                        if (_clienteUbicacion != null)
+                                          Marker(
+                                            point: _clienteUbicacion!,
+                                            width: 40, height: 40,
+                                            child: Icon(Icons.location_on, color: Colors.red, size: 40),
+                                          ),
+                                        if (_tecnicoUbicacion != null)
+                                          Marker(
+                                            point: _tecnicoUbicacion!,
+                                            width: 40, height: 40,
+                                            child: Icon(Icons.directions_car, color: Colors.blue, size: 40),
+                                          ),
+                                      ],
+                                    ),
+                                    if (_tecnicoUbicacion != null && _clienteUbicacion != null)
+                                      PolylineLayer(
+                                        polylines: [
+                                          Polyline(
+                                            points: [_tecnicoUbicacion!, _clienteUbicacion!],
+                                            strokeWidth: 4,
+                                            color: Colors.blue,
+                                          ),
+                                        ],
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  if (estado == 'en_camino' || estado == 'en_servicio') SizedBox(height: 15),
+
+                  // BOTON ABRIR EN GOOGLE MAPS
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 20),
-                    child: Container(
-                      padding: EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(15),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("Información del cliente", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                          SizedBox(height: 15),
-                          Row(children: [Icon(Icons.person, color: Colors.grey, size: 18), SizedBox(width: 8), Text(a['cliente_nombre'] ?? '')]),
-                          SizedBox(height: 8),
-                          Row(children: [Icon(Icons.phone, color: Colors.grey, size: 18), SizedBox(width: 8), Text(a['cliente_telefono'] ?? '')]),
-                          SizedBox(height: 8),
-                          Row(children: [Icon(Icons.directions_car, color: Colors.grey, size: 18), SizedBox(width: 8), Expanded(child: Text("${a['marca']} ${a['modelo']} - ${a['placa']}"))]),
-                        ],
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _abrirRutaEnMaps,
+                        icon: Icon(Icons.directions, color: Colors.white),
+                        label: Text("Abrir ruta en Google Maps",
+                            style: TextStyle(color: Colors.white)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade600,
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
                       ),
                     ),
                   ),
+
+                  SizedBox(height: 15),
+
+                  // INFO CLIENTE
+                  _card(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Información del cliente",
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      SizedBox(height: 15),
+                      _iconRow(Icons.person, a['cliente_nombre'] ?? ''),
+                      SizedBox(height: 8),
+                      _iconRow(Icons.phone, a['cliente_telefono'] ?? ''),
+                      SizedBox(height: 8),
+                      _iconRow(Icons.directions_car,
+                          "${a['marca']} ${a['modelo']} - ${a['placa']}"),
+                    ],
+                  )),
 
                   SizedBox(height: 15),
 
                   // DESCRIPCION
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    child: Container(
-                      padding: EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(15),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text("Descripción del problema", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                          SizedBox(height: 10),
-                          Text(a['descripcion'] ?? '', style: TextStyle(color: Colors.grey)),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  SizedBox(height: 15),
-
-                  // UBICACION
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(15),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
-                      ),
-                      child: ListTile(
-                        leading: Container(
-                          padding: EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(10)),
-                          child: Icon(Icons.location_on, color: Colors.red),
-                        ),
-                        title: Text("Ubicación del cliente", style: TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: Text("Lat: ${a['latitud']}, Lng: ${a['longitud']}", style: TextStyle(fontSize: 12)),
-                      ),
-                    ),
-                  ),
+                  _card(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Descripción del problema",
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                      SizedBox(height: 10),
+                      Text(a['descripcion'] ?? '', style: TextStyle(color: Colors.grey)),
+                    ],
+                  )),
 
                   SizedBox(height: 25),
 
                   // BOTONES DE ESTADO
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      children: [
-                        if (a['estado'] == 'aceptada')
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () => actualizarEstado('en_camino'),
-                              icon: Icon(Icons.directions_car, color: Colors.white),
-                              label: Text("Marcar En Camino", style: TextStyle(color: Colors.white, fontSize: 16)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orange,
-                                padding: EdgeInsets.symmetric(vertical: 15),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                              ),
-                            ),
-                          ),
-
-                        if (a['estado'] == 'en_camino')
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () => actualizarEstado('en_servicio'),
-                              icon: Icon(Icons.build, color: Colors.white),
-                              label: Text("Marcar Atendiendo", style: TextStyle(color: Colors.white, fontSize: 16)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
-                                padding: EdgeInsets.symmetric(vertical: 15),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                              ),
-                            ),
-                          ),
-
-                        if (a['estado'] == 'en_servicio')
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: finalizarServicio,
-                              icon: Icon(Icons.check_circle, color: Colors.white),
-                              label: Text("Finalizar y Registrar Pago", style: TextStyle(color: Colors.white, fontSize: 16)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                padding: EdgeInsets.symmetric(vertical: 15),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                    child: Column(children: [
+                      if (estado == 'aceptada')
+                        _boton("Marcar En Camino", Icons.directions_car, Colors.orange,
+                            () => actualizarEstado('en_camino')),
+                      if (estado == 'en_camino')
+                        _boton("Marcar Atendiendo", Icons.build, Colors.blue,
+                            () => actualizarEstado('en_servicio')),
+                      if (estado == 'en_servicio')
+                        _boton("Finalizar y Registrar Pago", Icons.check_circle, Colors.green,
+                            finalizarServicio),
+                    ]),
                   ),
 
                   SizedBox(height: 30),
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _card({required Widget child}) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+        ),
+        child: child,
+      ),
+    );
+  }
+
+  Widget _iconRow(IconData icono, String texto) {
+    return Row(children: [
+      Icon(icono, color: Colors.grey, size: 18),
+      SizedBox(width: 8),
+      Expanded(child: Text(texto, style: TextStyle(fontSize: 14))),
+    ]);
+  }
+
+  Widget _boton(String texto, IconData icono, Color color, VoidCallback onTap) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icono, color: Colors.white),
+        label: Text(texto, style: TextStyle(color: Colors.white, fontSize: 16)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          padding: EdgeInsets.symmetric(vertical: 15),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        ),
+      ),
     );
   }
 }
