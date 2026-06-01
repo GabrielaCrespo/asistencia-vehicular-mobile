@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'dart:convert';
 import '../services/emergencia_service.dart';
@@ -15,9 +17,11 @@ class SeguimientoScreen extends StatefulWidget {
 class _SeguimientoScreenState extends State<SeguimientoScreen> {
   Map<String, dynamic>? incidente;
   bool cargando = true;
-  String? _mensajeWs;
-
   WebSocketChannel? _channel;
+  MapController _mapController = MapController();
+
+  LatLng? _tecnicoUbicacion;
+  LatLng? _clienteUbicacion;
 
   @override
   void initState() {
@@ -32,7 +36,6 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
     super.dispose();
   }
 
-  // ── WebSocket ──────────────────────────────────────────────────
   void _conectarWebSocket() async {
     final sesion = await SessionService.getSesion();
     final token = sesion['token'] as String?;
@@ -40,7 +43,7 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
 
     try {
       _channel = WebSocketChannel.connect(
-        Uri.parse('ws://10.0.2.2:8000/ws?token=$token'),
+        Uri.parse('wss://asistencia-vehicular-backend.onrender.com/ws?token=$token'),
       );
 
       _channel!.stream.listen(
@@ -48,29 +51,29 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
           final data = jsonDecode(mensaje);
           if (data['tipo'] == 'pong' || data['tipo'] == 'conexion_establecida') return;
 
-          // Actualizar estado si viene un cambio de estado
           if (data['incidente_id'] == widget.incidenteId) {
-            setState(() {
-              _mensajeWs = data['titulo'] ?? data['mensaje'];
-              if (data['estado'] != null && incidente != null) {
-                incidente!['estado'] = data['estado'];
-              }
-            });
-
-            // Recargar detalle completo para reflejar todos los cambios
+            if (data['estado'] != null && incidente != null) {
+              setState(() => incidente!['estado'] = data['estado']);
+            }
+            if (data['tipo'] == 'ubicacion_tecnico' &&
+                data['latitud'] != null && data['longitud'] != null) {
+              setState(() {
+                _tecnicoUbicacion = LatLng(
+                  double.parse(data['latitud'].toString()),
+                  double.parse(data['longitud'].toString()),
+                );
+              });
+              _mapController.move(_tecnicoUbicacion!, 15);
+            }
             cargarDetalle();
-
-            // Mostrar snackbar con la notificación
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Row(
-                    children: [
-                      Icon(Icons.notifications, color: Colors.white),
-                      SizedBox(width: 10),
-                      Expanded(child: Text(data['titulo'] ?? 'Actualización recibida')),
-                    ],
-                  ),
+                  content: Row(children: [
+                    Icon(Icons.notifications, color: Colors.white),
+                    SizedBox(width: 10),
+                    Expanded(child: Text(data['titulo'] ?? 'Actualización')),
+                  ]),
                   backgroundColor: Colors.blue.shade700,
                   duration: Duration(seconds: 4),
                 ),
@@ -78,75 +81,76 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
             }
           }
         },
-        onError: (error) {
-          print('[WS] Error: $error');
-          // Reconectar después de 5 segundos
-          Future.delayed(Duration(seconds: 5), _conectarWebSocket);
-        },
-        onDone: () {
-          print('[WS] Conexión cerrada, reconectando...');
-          Future.delayed(Duration(seconds: 5), _conectarWebSocket);
-        },
+        onDone: () => Future.delayed(Duration(seconds: 30), _conectarWebSocket),
+        onError: (_) => _channel = null,
       );
 
-      // Ping cada 30s para mantener conexión viva
       Stream.periodic(Duration(seconds: 30)).listen((_) {
         if (_channel != null) _channel!.sink.add('ping');
       });
-
     } catch (e) {
-      print('[WS] Error conectando: $e');
+      print('[WS] Error: $e');
     }
   }
 
-  // ── Cargar detalle ─────────────────────────────────────────────
   void cargarDetalle() async {
     final resultado = await EmergenciaService.obtenerDetalle(widget.incidenteId);
     if (resultado['success']) {
+      final inc = resultado['incidente'];
       setState(() {
-        incidente = resultado['incidente'];
+        incidente = inc;
         cargando = false;
+        if (inc['latitud'] != null && inc['longitud'] != null) {
+          _clienteUbicacion = LatLng(
+            double.parse(inc['latitud'].toString()),
+            double.parse(inc['longitud'].toString()),
+          );
+        }
       });
     } else {
       setState(() => cargando = false);
     }
   }
 
-  // ── Helpers de estado ──────────────────────────────────────────
   Color getColorEstado(String estado) {
     switch (estado) {
       case 'pendiente': return Colors.orange;
-      case 'asignada':  return Colors.blue;
-      case 'en_camino': return Colors.blue;
+      case 'asignada': return Colors.blue;
+      case 'en_camino': return Colors.indigo;
       case 'en_servicio': return Colors.purple;
-      case 'atendido':  return Colors.green;
-      case 'cerrada':   return Colors.green;
-      default:          return Colors.grey;
+      case 'atendido': return Colors.green;
+      case 'cerrada': return Colors.green;
+      default: return Colors.grey;
     }
   }
 
   IconData getIconoEstado(String estado) {
     switch (estado) {
-      case 'pendiente':   return Icons.access_time;
-      case 'asignada':    return Icons.store;
-      case 'en_camino':   return Icons.directions_car;
+      case 'pendiente': return Icons.access_time;
+      case 'asignada': return Icons.store;
+      case 'en_camino': return Icons.directions_car;
       case 'en_servicio': return Icons.build;
-      case 'atendido':    return Icons.check_circle;
-      case 'cerrada':     return Icons.check_circle;
-      default:            return Icons.help;
+      case 'atendido': return Icons.check_circle;
+      case 'cerrada': return Icons.check_circle;
+      default: return Icons.help;
     }
   }
 
   String getTextoEstado(String estado) {
     switch (estado) {
-      case 'pendiente':   return 'Pendiente';
-      case 'asignada':    return 'Taller Asignado';
-      case 'en_camino':   return 'En Camino';
+      case 'pendiente': return 'Pendiente';
+      case 'asignada': return 'Taller Asignado';
+      case 'en_camino': return 'En Camino';
       case 'en_servicio': return 'Atendiendo';
-      case 'atendido':    return 'Atendido';
-      case 'cerrada':     return 'Completado';
-      default:            return estado;
+      case 'atendido': return 'Atendido';
+      case 'cerrada': return 'Completado';
+      default: return estado;
     }
+  }
+
+  bool _paso(String estadoActual, String paso) {
+    final orden = ['pendiente', 'asignada', 'en_camino', 'en_servicio', 'cerrada'];
+    return orden.indexOf(estadoActual) >= orden.indexOf(paso);
   }
 
   @override
@@ -164,14 +168,10 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
             style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
         centerTitle: true,
         actions: [
-          // Indicador de conexión WebSocket
           Padding(
             padding: EdgeInsets.only(right: 8),
-            child: Icon(
-              Icons.circle,
-              color: _channel != null ? Colors.green : Colors.grey,
-              size: 14,
-            ),
+            child: Icon(Icons.circle,
+                color: _channel != null ? Colors.green : Colors.grey, size: 14),
           ),
           IconButton(
             icon: Icon(Icons.refresh, color: Colors.blue),
@@ -206,42 +206,32 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
                                 color: getColorEstado(incidente!['estado']).withOpacity(0.1),
                                 shape: BoxShape.circle,
                               ),
-                              child: Icon(
-                                getIconoEstado(incidente!['estado']),
-                                size: 50,
-                                color: getColorEstado(incidente!['estado']),
-                              ),
+                              child: Icon(getIconoEstado(incidente!['estado']),
+                                  size: 50, color: getColorEstado(incidente!['estado'])),
                             ),
                             SizedBox(height: 15),
-                            Text(
-                              getTextoEstado(incidente!['estado']),
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: getColorEstado(incidente!['estado']),
-                              ),
-                            ),
+                            Text(getTextoEstado(incidente!['estado']),
+                                style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: getColorEstado(incidente!['estado']))),
                             SizedBox(height: 5),
                             Text("Emergencia #${incidente!['incidente_id']}",
                                 style: TextStyle(color: Colors.grey, fontSize: 13)),
-                            // Indicador tiempo real
                             SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.circle, color: Colors.green, size: 10),
-                                SizedBox(width: 5),
-                                Text("Actualizando en tiempo real",
-                                    style: TextStyle(color: Colors.green, fontSize: 12)),
-                              ],
-                            ),
+                            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                              Icon(Icons.circle, color: Colors.green, size: 10),
+                              SizedBox(width: 5),
+                              Text("Actualizando en tiempo real",
+                                  style: TextStyle(color: Colors.green, fontSize: 12)),
+                            ]),
                           ],
                         ),
                       ),
 
                       SizedBox(height: 20),
 
-                      // TIMELINE
+                      // TIMELINE VERTICAL
                       Padding(
                         padding: EdgeInsets.symmetric(horizontal: 20),
                         child: Container(
@@ -249,9 +239,8 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(15),
-                            boxShadow: [
-                              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)
-                            ],
+                            boxShadow: [BoxShadow(
+                                color: Colors.black.withOpacity(0.05), blurRadius: 10)],
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -259,46 +248,162 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
                               Text("Estado del servicio",
                                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                               SizedBox(height: 20),
-                              _buildPaso("Solicitud enviada", "Tu emergencia fue registrada",
+                              _buildPasoV("Solicitud enviada", "Tu emergencia fue registrada",
                                   true, Icons.check_circle, Colors.green),
-                              _buildPaso(
+                              _buildPasoV(
                                 "Taller asignado",
-                                incidente!['taller_nombre'] != null
-                                    ? "Taller asignado"
-                                    : "Buscando el taller más cercano",
-                                incidente!['taller_nombre'] != null,
-                                incidente!['taller_nombre'] != null
-                                    ? Icons.check_circle
-                                    : Icons.access_time,
-                                incidente!['taller_nombre'] != null ? Colors.green : Colors.orange,
+                                _paso(incidente!['estado'], 'asignada')
+                                    ? "Taller asignado" : "Buscando el taller más cercano",
+                                _paso(incidente!['estado'], 'asignada'),
+                                _paso(incidente!['estado'], 'asignada')
+                                    ? Icons.check_circle : Icons.access_time,
+                                _paso(incidente!['estado'], 'asignada')
+                                    ? Colors.green : Colors.orange,
                               ),
-                              _buildPaso(
+                              _buildPasoV(
                                 "En camino",
-                                ['en_camino', 'en_servicio', 'atendido', 'cerrada'].contains(incidente!['estado'])
-                                    ? "El técnico está en camino"
-                                    : "Esperando confirmación",
-                                ['en_camino', 'en_servicio', 'atendido', 'cerrada'].contains(incidente!['estado']),
-                                ['en_camino', 'en_servicio', 'atendido', 'cerrada'].contains(incidente!['estado'])
-                                    ? Icons.check_circle
-                                    : Icons.access_time,
-                                ['en_camino', 'en_servicio', 'atendido', 'cerrada'].contains(incidente!['estado'])
-                                    ? Colors.green
-                                    : Colors.grey,
+                                _paso(incidente!['estado'], 'en_camino')
+                                    ? "El técnico está en camino" : "Esperando confirmación",
+                                _paso(incidente!['estado'], 'en_camino'),
+                                _paso(incidente!['estado'], 'en_camino')
+                                    ? Icons.check_circle : Icons.access_time,
+                                _paso(incidente!['estado'], 'en_camino')
+                                    ? Colors.green : Colors.grey,
                               ),
-                              _buildPaso(
+                              _buildPasoV(
                                 "Servicio completado",
-                                ['atendido', 'cerrada'].contains(incidente!['estado'])
-                                    ? "Tu vehículo fue atendido"
-                                    : "Pendiente",
-                                ['atendido', 'cerrada'].contains(incidente!['estado']),
-                                ['atendido', 'cerrada'].contains(incidente!['estado'])
-                                    ? Icons.check_circle
-                                    : Icons.access_time,
-                                ['atendido', 'cerrada'].contains(incidente!['estado'])
-                                    ? Colors.green
-                                    : Colors.grey,
+                                _paso(incidente!['estado'], 'cerrada')
+                                    ? "Tu vehículo fue atendido" : "Pendiente",
+                                _paso(incidente!['estado'], 'cerrada'),
+                                _paso(incidente!['estado'], 'cerrada')
+                                    ? Icons.check_circle : Icons.access_time,
+                                _paso(incidente!['estado'], 'cerrada')
+                                    ? Colors.green : Colors.grey,
                                 isLast: true,
                               ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      SizedBox(height: 20),
+
+                      // MAPA OSM
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(15),
+                            boxShadow: [BoxShadow(
+                                color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: EdgeInsets.all(15),
+                                child: Row(children: [
+                                  Icon(Icons.map, color: Colors.blue),
+                                  SizedBox(width: 8),
+                                  Text("Ubicación del técnico",
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                  Spacer(),
+                                  if (incidente!['estado'] == 'en_camino' &&
+                                      _tecnicoUbicacion == null)
+                                    Row(children: [
+                                      SizedBox(width: 10, height: 10,
+                                          child: CircularProgressIndicator(strokeWidth: 2)),
+                                      SizedBox(width: 6),
+                                      Text("Esperando...",
+                                          style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                    ]),
+                                ]),
+                              ),
+
+                              // Mensaje cuando aún no está en camino
+                              if (incidente!['estado'] == 'pendiente' ||
+                                  incidente!['estado'] == 'asignada')
+                                Padding(
+                                  padding: EdgeInsets.fromLTRB(15, 0, 15, 15),
+                                  child: Container(
+                                    padding: EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Row(children: [
+                                      Icon(Icons.info_outline, color: Colors.blue, size: 18),
+                                      SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          "Cuando el técnico esté en camino podrás ver su ubicación en tiempo real aquí.",
+                                          style: TextStyle(color: Colors.blue.shade700, fontSize: 12),
+                                        ),
+                                      ),
+                                    ]),
+                                  ),
+                                ),
+
+                              // Mapa OSM
+                              if (incidente!['estado'] == 'en_camino' ||
+                                  incidente!['estado'] == 'en_servicio')
+                                ClipRRect(
+                                  borderRadius: BorderRadius.only(
+                                    bottomLeft: Radius.circular(15),
+                                    bottomRight: Radius.circular(15),
+                                  ),
+                                  child: SizedBox(
+                                    height: 280,
+                                    child: FlutterMap(
+                                      mapController: _mapController,
+                                      options: MapOptions(
+                                        initialCenter: _tecnicoUbicacion ??
+                                            _clienteUbicacion ??
+                                            LatLng(-17.7833, -63.1821),
+                                        initialZoom: 15,
+                                      ),
+                                      children: [
+                                        TileLayer(
+                                          urlTemplate:
+                                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                          userAgentPackageName: 'com.example.mobile_app',
+                                        ),
+                                        MarkerLayer(
+                                          markers: [
+                                            if (_clienteUbicacion != null)
+                                              Marker(
+                                                point: _clienteUbicacion!,
+                                                width: 40,
+                                                height: 40,
+                                                child: Icon(Icons.location_on,
+                                                    color: Colors.red, size: 40),
+                                              ),
+                                            if (_tecnicoUbicacion != null)
+                                              Marker(
+                                                point: _tecnicoUbicacion!,
+                                                width: 40,
+                                                height: 40,
+                                                child: Icon(Icons.directions_car,
+                                                    color: Colors.blue, size: 40),
+                                              ),
+                                          ],
+                                        ),
+                                        // Línea de ruta entre técnico y cliente
+                                        if (_tecnicoUbicacion != null && _clienteUbicacion != null)
+                                          PolylineLayer(
+                                            polylines: [
+                                              Polyline(
+                                                points: [_tecnicoUbicacion!, _clienteUbicacion!],
+                                                strokeWidth: 3,
+                                                color: Colors.blue,
+                                              ),
+                                            ],
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -315,9 +420,8 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(15),
-                              boxShadow: [
-                                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)
-                              ],
+                              boxShadow: [BoxShadow(
+                                  color: Colors.black.withOpacity(0.05), blurRadius: 10)],
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -330,9 +434,8 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
                                   leading: Container(
                                     padding: EdgeInsets.all(10),
                                     decoration: BoxDecoration(
-                                      color: Colors.blue.shade50,
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
+                                        color: Colors.blue.shade50,
+                                        borderRadius: BorderRadius.circular(10)),
                                     child: Icon(Icons.store, color: Colors.blue),
                                   ),
                                   title: Text(incidente!['taller_nombre'],
@@ -340,17 +443,14 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
                                   subtitle: Text(incidente!['taller_direccion'] ?? ''),
                                 ),
                                 if (incidente!['tiempo_estimado_minutos'] != null)
-                                  Row(
-                                    children: [
-                                      Icon(Icons.access_time, color: Colors.orange, size: 18),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        "Tiempo estimado: ${incidente!['tiempo_estimado_minutos']} minutos",
-                                        style: TextStyle(
-                                            color: Colors.orange, fontWeight: FontWeight.w500),
-                                      ),
-                                    ],
-                                  ),
+                                  Row(children: [
+                                    Icon(Icons.access_time, color: Colors.orange, size: 18),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      "Tiempo estimado: ${incidente!['tiempo_estimado_minutos']} minutos",
+                                      style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w500),
+                                    ),
+                                  ]),
                               ],
                             ),
                           ),
@@ -366,9 +466,8 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(15),
-                            boxShadow: [
-                              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)
-                            ],
+                            boxShadow: [BoxShadow(
+                                color: Colors.black.withOpacity(0.05), blurRadius: 10)],
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -381,9 +480,8 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
                                 leading: Container(
                                   padding: EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
+                                      color: Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(10)),
                                   child: Icon(Icons.directions_car, color: Colors.grey),
                                 ),
                                 title: Text("${incidente!['marca']} ${incidente!['modelo']}",
@@ -402,7 +500,7 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
     );
   }
 
-  Widget _buildPaso(String titulo, String subtitulo, bool completado,
+  Widget _buildPasoV(String titulo, String subtitulo, bool completado,
       IconData icono, Color color, {bool isLast = false}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
