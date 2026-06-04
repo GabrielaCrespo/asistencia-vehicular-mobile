@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'session_service.dart';
 
 class VehiculoService {
   static const String baseUrl = 'https://asistencia-vehicular-backend.onrender.com';
@@ -8,9 +9,14 @@ class VehiculoService {
   // LISTAR VEHICULOS
   static Future<Map<String, dynamic>> listar(int usuarioId) async {
     try {
+      final sesion = await SessionService.getSesion();
+      final token = sesion['token'] ?? '';
       final response = await http.get(
         Uri.parse('$baseUrl/api/vehiculo/listar/$usuarioId'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
       );
 
       final data = jsonDecode(response.body);
@@ -36,9 +42,14 @@ class VehiculoService {
     String tipo = "auto",
   }) async {
     try {
+      final sesion = await SessionService.getSesion();
+      final token = sesion['token'] ?? '';
       final response = await http.post(
         Uri.parse('$baseUrl/api/vehiculo/registrar'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
         body: jsonEncode({
           'usuario_id': usuarioId,
           'placa': placa,
@@ -65,9 +76,14 @@ class VehiculoService {
   // ELIMINAR VEHICULO
   static Future<Map<String, dynamic>> eliminar(int vehiculoId) async {
     try {
+      final sesion = await SessionService.getSesion();
+      final token = sesion['token'] ?? '';
       final response = await http.delete(
         Uri.parse('$baseUrl/api/vehiculo/eliminar/$vehiculoId'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
       );
 
       final data = jsonDecode(response.body);

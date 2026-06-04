@@ -147,8 +147,10 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
   }
 
   void finalizarServicio() {
+    bool enviando = false;
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (_) => StatefulBuilder(
         builder: (context, setStateDialog) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -241,32 +243,36 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
               child: Text("Cancelar", style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
-              onPressed: () async {
-                if (montoController.text.trim().isEmpty) return;
-                Navigator.of(context).pop();
-                setState(() => procesando = true);
-                final resultado = await TecnicoService.registrarPago(
-                  asignacionId: widget.asignacion['asignacion_id'],
-                  tallerId: widget.tallerId,
-                  monto: double.parse(montoController.text.trim()),
-                  observaciones: observacionesController.text.trim(),
-                  metodoPago: metodoPago,
-                );
-                setState(() => procesando = false);
-                if (resultado['success']) {
-                  _detenerEnvioUbicacion();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Servicio finalizado"), backgroundColor: Colors.green),
-                  );
-                  await Future.delayed(Duration(seconds: 2));
-                  widget.onActualizar();
-                  Navigator.of(context).pop();
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(resultado['message']), backgroundColor: Colors.red),
-                  );
-                }
-              },
+              onPressed: enviando
+                  ? null
+                  : () async {
+                      if (montoController.text.trim().isEmpty) return;
+                      setStateDialog(() => enviando = true);
+                      final nav = Navigator.of(context);
+                      final scaffold = ScaffoldMessenger.of(context);
+                      final resultado = await TecnicoService.registrarPago(
+                        asignacionId: widget.asignacion['asignacion_id'],
+                        tallerId: widget.tallerId,
+                        monto: double.parse(montoController.text.trim()),
+                        observaciones: observacionesController.text.trim(),
+                        metodoPago: metodoPago,
+                      );
+                      if (resultado['success']) {
+                        nav.pop();
+                        _detenerEnvioUbicacion();
+                        scaffold.showSnackBar(
+                          SnackBar(content: Text("Servicio finalizado"), backgroundColor: Colors.green),
+                        );
+                        await Future.delayed(Duration(seconds: 2));
+                        widget.onActualizar();
+                        nav.pop();
+                      } else {
+                        setStateDialog(() => enviando = false);
+                        scaffold.showSnackBar(
+                          SnackBar(content: Text(resultado['message']), backgroundColor: Colors.red),
+                        );
+                      }
+                    },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Color(0xFF1A237E),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

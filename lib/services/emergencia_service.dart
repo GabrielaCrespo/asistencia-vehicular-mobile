@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'session_service.dart';
 
 class EmergenciaService {
   static const String baseUrl = 'https://asistencia-vehicular-backend.onrender.com';
@@ -13,13 +14,18 @@ class EmergenciaService {
     required double latitud,
     required double longitud,
     String? tipoProblema,
-     String? imagenPath, 
+     String? imagenPath,
       String? audioPath,
   }) async {
     try {
+      final sesion = await SessionService.getSesion();
+      final token = sesion['token'] ?? '';
       final response = await http.post(
         Uri.parse('$baseUrl/api/emergencia/registrar'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
         body: jsonEncode({
           'usuario_id': usuarioId,
           'vehiculo_id': vehiculoId,
@@ -45,11 +51,14 @@ class EmergenciaService {
   }
 
   // LISTAR EMERGENCIAS
-  static Future<Map<String, dynamic>> listar(int usuarioId) async {
+  static Future<Map<String, dynamic>> listar(int usuarioId, {String? token}) async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/api/emergencia/listar/$usuarioId'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
       );
 
       final data = jsonDecode(response.body);
@@ -66,9 +75,14 @@ class EmergenciaService {
   // OBTENER DETALLE
 static Future<Map<String, dynamic>> obtenerDetalle(int incidenteId) async {
   try {
+    final sesion = await SessionService.getSesion();
+    final token = sesion['token'] ?? '';
     final response = await http.get(
       Uri.parse('$baseUrl/api/emergencia/detalle/$incidenteId'),
-      headers: {'Content-Type': 'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+      },
     );
 
     final data = jsonDecode(response.body);

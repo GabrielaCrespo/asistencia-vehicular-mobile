@@ -11,6 +11,7 @@ import 'perfil_screen.dart';
 import '../services/emergencia_service.dart';
 import 'seguimiento_screen.dart';
 import 'historial_screen.dart';
+import 'cotizaciones_screen.dart';
 
 class ClienteScreen extends StatefulWidget {
   @override
@@ -47,11 +48,11 @@ class _ClienteScreenState extends State<ClienteScreen> {
     });
 
     final usuarioId = sesion['usuario_id'] ?? 0;
-    final resultado = await EmergenciaService.listar(usuarioId);
+    final resultado = await EmergenciaService.listar(usuarioId, token: sesion['token'] as String?);
     if (resultado['success']) {
       final lista = List<Map<String, dynamic>>.from(resultado['emergencias']);
       final activa = lista.firstWhere(
-        (e) => ['pendiente', 'asignada', 'en_camino', 'en_servicio'].contains(e['estado']),
+        (e) => ['pendiente', 'cotizacion', 'asignada', 'en_camino', 'en_servicio'].contains(e['estado']),
         orElse: () => {},
       );
 
@@ -95,7 +96,11 @@ class _ClienteScreenState extends State<ClienteScreen> {
                   double.parse(data['longitud'].toString()),
                 );
               });
-              _mapController.move(_tecnicoUbicacion!, 15);
+              // Solo mover el mapa si el widget FlutterMap está montado
+              final est = emergenciaActiva?['estado'];
+              if (est == 'en_camino' || est == 'en_servicio') {
+                _mapController.move(_tecnicoUbicacion!, 15);
+              }
             }
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -134,19 +139,34 @@ class _ClienteScreenState extends State<ClienteScreen> {
       Navigator.push(context, MaterialPageRoute(builder: (_) => HistorialScreen()));
     } else if (index == 2) {
       Navigator.push(context, MaterialPageRoute(builder: (_) => PerfilScreen()));
+    } else if (index == 3) {
+      if (emergenciaActiva != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CotizacionesScreen(
+              incidenteId: emergenciaActiva!['incidente_id'],
+            ),
+          ),
+        );
+      }
     } else {
       setState(() => _selectedIndex = index);
     }
   }
 
   bool _paso(String estadoActual, String paso) {
-    final orden = ['pendiente', 'asignada', 'en_camino', 'en_servicio', 'cerrada'];
-    return orden.indexOf(estadoActual) >= orden.indexOf(paso);
+    final orden = ['pendiente', 'cotizacion', 'asignada', 'en_camino', 'en_servicio', 'cerrada'];
+    final ci = orden.indexOf(estadoActual);
+    final si = orden.indexOf(paso);
+    if (ci < 0 || si < 0) return false;
+    return ci >= si;
   }
 
   String _textoEstado(String estado) {
     switch (estado) {
       case 'pendiente': return 'Buscando taller...';
+      case 'cotizacion': return 'Cotizaciones disponibles';
       case 'asignada': return 'Taller asignado';
       case 'en_camino': return 'Técnico en camino';
       case 'en_servicio': return 'Siendo atendido';
@@ -158,6 +178,7 @@ class _ClienteScreenState extends State<ClienteScreen> {
   Color _colorEstado(String estado) {
     switch (estado) {
       case 'pendiente': return Colors.orange;
+      case 'cotizacion': return Colors.amber.shade700;
       case 'asignada': return Colors.blue;
       case 'en_camino': return Colors.indigo;
       case 'en_servicio': return Colors.purple;
@@ -328,6 +349,7 @@ class _ClienteScreenState extends State<ClienteScreen> {
 
                       // Mensaje cuando aún no está en camino
                       if (emergenciaActiva!['estado'] == 'pendiente' ||
+                          emergenciaActiva!['estado'] == 'cotizacion' ||
                           emergenciaActiva!['estado'] == 'asignada') ...[
                         Padding(
                           padding: EdgeInsets.fromLTRB(15, 0, 15, 8),
@@ -498,6 +520,48 @@ class _ClienteScreenState extends State<ClienteScreen> {
                 ),
               ),
             ),
+
+            // Acceso a Cotizaciones (visible cuando hay emergencia activa pendiente)
+            if (emergenciaActiva != null &&
+                (emergenciaActiva!['estado'] == 'pendiente' ||
+                 emergenciaActiva!['estado'] == 'cotizacion')) ...[
+              SizedBox(height: 10),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(color: Colors.amber.shade200),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+                  ),
+                  child: ListTile(
+                    leading: Container(
+                      padding: EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.description, color: Colors.amber.shade700),
+                    ),
+                    title: Text("Ver Cotizaciones",
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: Text(
+                      "Compara propuestas para tu emergencia #${emergenciaActiva!['incidente_id']}",
+                    ),
+                    trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CotizacionesScreen(
+                          incidenteId: emergenciaActiva!['incidente_id'],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
 
             SizedBox(height: 30),
           ],

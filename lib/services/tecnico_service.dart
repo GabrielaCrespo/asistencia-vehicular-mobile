@@ -36,9 +36,14 @@ class TecnicoService {
   // OBTENER ASIGNACIÓN ACTIVA
   static Future<Map<String, dynamic>> getAsignacion(int tecnicoId) async {
     try {
+      final sesion = await SessionService.getSesion();
+      final token = sesion['token'] ?? '';
       final response = await http.get(
         Uri.parse('$baseUrl/api/tecnico/asignacion/$tecnicoId'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+        },
       );
 
       final data = jsonDecode(response.body);
@@ -92,9 +97,14 @@ class TecnicoService {
   String? metodoPago,
 }) async {
   try {
+    final sesion = await SessionService.getSesion();
+    final token = sesion['token'] ?? '';
     final response = await http.put(
       Uri.parse('$baseUrl/api/tecnico/asignacion/$asignacionId/finalizar'),
-      headers: {'Content-Type': 'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        if (token.isNotEmpty) 'Authorization': 'Bearer $token',
+      },
       body: jsonEncode({
         'observaciones': observaciones,
         'costo': monto,
