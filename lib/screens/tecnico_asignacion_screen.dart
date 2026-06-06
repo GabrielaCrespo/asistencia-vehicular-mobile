@@ -177,63 +177,25 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
-                SizedBox(height: 15),
-                DropdownButtonFormField<String>(
-                  value: metodoPago,
-                  decoration: InputDecoration(
-                    labelText: "Método de pago",
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                SizedBox(height: 12),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blue.shade200),
                   ),
-                  items: [
-                    DropdownMenuItem(value: "efectivo", child: Text("Efectivo")),
-                    DropdownMenuItem(value: "transferencia", child: Text("Transferencia")),
-                    DropdownMenuItem(value: "qr", child: Text("QR")),
-                  ],
-                  onChanged: (v) => setStateDialog(() => metodoPago = v!),
-                ),
-                if (metodoPago == 'qr') ...[
-                  SizedBox(height: 15),
-                  Container(
-                    padding: EdgeInsets.all(15),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: Column(children: [
-                      Text("Escanea el QR para pagar",
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      SizedBox(height: 10),
-                      Image.network(
-                        'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=AsistenciaVehicular-Pago',
-                        width: 150, height: 150,
-                        errorBuilder: (_, __, ___) => Icon(Icons.qr_code, size: 80, color: Colors.grey),
+                  child: Row(children: [
+                    Icon(Icons.info_outline, color: Colors.blue.shade700, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'El cliente seleccionará el método de pago desde su app.',
+                        style: TextStyle(fontSize: 12, color: Colors.blue.shade800),
                       ),
-                    ]),
-                  ),
-                ],
-                if (metodoPago == 'transferencia') ...[
-                  SizedBox(height: 15),
-                  Container(
-                    padding: EdgeInsets.all(15),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text("Datos para transferencia",
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        SizedBox(height: 8),
-                        _infoRow("Banco", "Banco Nacional de Bolivia"),
-                        _infoRow("Titular", "Asistencia Vehicular S.R.L."),
-                        _infoRow("Cuenta", "1234567890"),
-                        _infoRow("Referencia", "Servicio #${widget.asignacion['asignacion_id']}"),
-                      ],
-                    ),
-                  ),
-                ],
+                  ]),
+                ),
               ],
             ),
           ),
@@ -282,16 +244,6 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _infoRow(String label, String valor) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 6),
-      child: Row(children: [
-        Text("$label: ", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.blue.shade700)),
-        Expanded(child: Text(valor, style: TextStyle(fontSize: 12))),
-      ]),
     );
   }
 

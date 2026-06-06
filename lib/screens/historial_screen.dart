@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../services/emergencia_service.dart';
 import '../services/session_service.dart';
+import '../services/stripe_service.dart';
 import 'seguimiento_screen.dart';
 import 'calificacion_screen.dart';
+import 'pago_screen.dart';
 
 class HistorialScreen extends StatefulWidget {
   @override
@@ -86,6 +88,41 @@ class _HistorialScreenState extends State<HistorialScreen> {
   bool _esServicioFinalizado(String estado) {
     const finalizados = {'atendido', 'cerrada', 'completado', 'finalizado'};
     return finalizados.contains(estado);
+  }
+
+  Future<void> _abrirPago(int incidenteId) async {
+    final pago = await StripeService.getPagoIncidente(incidenteId);
+    if (!mounted) return;
+
+    if (pago == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se encontró un pago pendiente para este servicio')),
+      );
+      return;
+    }
+
+    if (pago['estado'] == 'completado') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este servicio ya fue pagado'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      return;
+    }
+
+    final pagado = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PagoScreen(
+          pagoId: pago['pago_id'] as int,
+          monto: (pago['monto_total'] as num).toDouble(),
+          incidenteId: incidenteId,
+        ),
+      ),
+    );
+
+    if (pagado == true) cargarHistorial();
   }
 
   @override
@@ -322,41 +359,66 @@ class _HistorialScreenState extends State<HistorialScreen> {
                                       ],
                                     ),
 
-                                    // BOTÓN VALORAR (solo servicios finalizados)
+                                    // BOTONES (solo servicios finalizados)
                                     if (_esServicioFinalizado(e['estado'])) ...[
                                       SizedBox(height: 12),
                                       Divider(height: 1, color: Colors.grey.shade200),
                                       SizedBox(height: 12),
-                                      SizedBox(
-                                        width: double.infinity,
-                                        height: 38,
-                                        child: ElevatedButton.icon(
-                                          onPressed: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) => CalificacionScreen(
-                                                  incidenteId: e['incidente_id'],
-                                                  tallerNombre: e['taller_nombre'] as String?,
-                                                  tipoProblema: e['tipo_problema'] as String?,
-                                                  fechaCreacion: e['fecha_creacion']?.toString(),
-                                                ),
+                                      Row(children: [
+                                        // Pagar
+                                        Expanded(
+                                          child: SizedBox(
+                                            height: 38,
+                                            child: ElevatedButton.icon(
+                                              onPressed: () => _abrirPago(e['incidente_id'] as int),
+                                              icon: Icon(Icons.payment, size: 16),
+                                              label: Text('Pagar',
+                                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Color(0xFF1A237E),
+                                                foregroundColor: Colors.white,
+                                                shape: RoundedRectangleBorder(
+                                                    borderRadius: BorderRadius.circular(10)),
+                                                elevation: 0,
+                                                padding: EdgeInsets.symmetric(horizontal: 8),
                                               ),
-                                            );
-                                          },
-                                          icon: Icon(Icons.star_border_rounded, size: 18),
-                                          label: Text('Valorar servicio',
-                                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Color(0xFF5cbdb9),
-                                            foregroundColor: Colors.white,
-                                            shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(10)),
-                                            elevation: 0,
-                                            padding: EdgeInsets.symmetric(horizontal: 12),
+                                            ),
                                           ),
                                         ),
-                                      ),
+                                        SizedBox(width: 10),
+                                        // Valorar
+                                        Expanded(
+                                          child: SizedBox(
+                                            height: 38,
+                                            child: ElevatedButton.icon(
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) => CalificacionScreen(
+                                                      incidenteId: e['incidente_id'],
+                                                      tallerNombre: e['taller_nombre'] as String?,
+                                                      tipoProblema: e['tipo_problema'] as String?,
+                                                      fechaCreacion: e['fecha_creacion']?.toString(),
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                              icon: Icon(Icons.star_border_rounded, size: 16),
+                                              label: Text('Valorar',
+                                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Color(0xFF5cbdb9),
+                                                foregroundColor: Colors.white,
+                                                shape: RoundedRectangleBorder(
+                                                    borderRadius: BorderRadius.circular(10)),
+                                                elevation: 0,
+                                                padding: EdgeInsets.symmetric(horizontal: 8),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ]),
                                     ],
                                   ],
                                 ),
