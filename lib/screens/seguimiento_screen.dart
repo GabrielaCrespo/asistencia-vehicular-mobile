@@ -5,6 +5,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'dart:convert';
 import '../services/emergencia_service.dart';
 import '../services/session_service.dart';
+import '../services/calificacion_service.dart';
+import 'calificacion_screen.dart';
 
 class SeguimientoScreen extends StatefulWidget {
   final int incidenteId;
@@ -22,6 +24,13 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
 
   LatLng? _tecnicoUbicacion;
   LatLng? _clienteUbicacion;
+
+  bool _yaCalificado = false;
+  bool _calificacionCargada = false;
+
+  static const Set<String> _estadosFinalizados = {
+    'atendido', 'cerrada', 'completado', 'finalizado'
+  };
 
   @override
   void initState() {
@@ -107,9 +116,22 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
           );
         }
       });
+      final String estado = inc['estado'] ?? '';
+      if (_estadosFinalizados.contains(estado) && !_calificacionCargada) {
+        _verificarCalificacion();
+      }
     } else {
       setState(() => cargando = false);
     }
+  }
+
+  Future<void> _verificarCalificacion() async {
+    final result = await CalificacionService.getCalificacion(widget.incidenteId);
+    if (!mounted) return;
+    setState(() {
+      _calificacionCargada = true;
+      _yaCalificado = result['exists'] == true;
+    });
   }
 
   Color getColorEstado(String estado) {
@@ -493,10 +515,88 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
                         ),
                       ),
 
+                      // CALIFICACIÓN
+                      if (_estadosFinalizados.contains(incidente!['estado']) &&
+                          _calificacionCargada) ...[
+                        SizedBox(height: 20),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: _buildSeccionCalificacion(),
+                        ),
+                      ],
+
                       SizedBox(height: 30),
                     ],
                   ),
                 ),
+    );
+  }
+
+  Widget _buildSeccionCalificacion() {
+    if (_yaCalificado) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.green.shade50,
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: Colors.green.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.star_rounded, color: Colors.amber.shade600, size: 26),
+            const SizedBox(width: 10),
+            Text(
+              'Servicio calificado',
+              style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.green.shade700,
+                  fontSize: 15),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 10),
+          child: Text('¿Cómo fue tu experiencia?',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        ),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton.icon(
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CalificacionScreen(
+                    incidenteId: widget.incidenteId,
+                    tallerNombre: incidente!['taller_nombre'] as String?,
+                    tipoProblema: incidente!['tipo_problema'] as String?,
+                    fechaCreacion: incidente!['fecha_creacion']?.toString(),
+                  ),
+                ),
+              );
+              _verificarCalificacion();
+            },
+            icon: const Icon(Icons.star_border_rounded, size: 22),
+            label: const Text('Calificar el servicio',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF5cbdb9),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
+            ),
+          ),
+        ),
+      ],
     );
   }
 

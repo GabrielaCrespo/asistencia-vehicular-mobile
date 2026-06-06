@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/emergencia_service.dart';
 import '../services/session_service.dart';
 import 'seguimiento_screen.dart';
+import 'calificacion_screen.dart';
 
 class HistorialScreen extends StatefulWidget {
   @override
@@ -21,8 +22,9 @@ class _HistorialScreenState extends State<HistorialScreen> {
   void cargarHistorial() async {
     final sesion = await SessionService.getSesion();
     final usuarioId = sesion['usuario_id'] ?? 0;
+    final token = sesion['token'] as String? ?? '';
 
-    final resultado = await EmergenciaService.listar(usuarioId);
+    final resultado = await EmergenciaService.listar(usuarioId, token: token);
     if (resultado['success']) {
       setState(() {
         emergencias = List<Map<String, dynamic>>.from(resultado['emergencias']);
@@ -79,6 +81,11 @@ class _HistorialScreenState extends State<HistorialScreen> {
     } catch (e) {
       return fecha;
     }
+  }
+
+  bool _esServicioFinalizado(String estado) {
+    const finalizados = {'atendido', 'cerrada', 'completado', 'finalizado'};
+    return finalizados.contains(estado);
   }
 
   @override
@@ -221,95 +228,136 @@ class _HistorialScreenState extends State<HistorialScreen> {
                                   borderRadius: BorderRadius.circular(15),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
+                                      color: Colors.black.withValues(alpha: 0.05),
                                       blurRadius: 10,
                                     ),
                                   ],
                                 ),
-                                child: Row(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    Row(
+                                      children: [
+                                        // ICONO ESTADO
+                                        Container(
+                                          padding: EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: getColorEstado(e['estado']).withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Icon(
+                                            getIconoEstado(e['estado']),
+                                            color: getColorEstado(e['estado']),
+                                            size: 28,
+                                          ),
+                                        ),
 
-                                    // ICONO ESTADO
-                                    Container(
-                                      padding: EdgeInsets.all(12),
-                                      decoration: BoxDecoration(
-                                        color: getColorEstado(e['estado']).withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Icon(
-                                        getIconoEstado(e['estado']),
-                                        color: getColorEstado(e['estado']),
-                                        size: 28,
-                                      ),
-                                    ),
+                                        SizedBox(width: 15),
 
-                                    SizedBox(width: 15),
-
-                                    // INFO
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        // INFO
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                "Emergencia #${e['incidente_id']}",
-                                                style: TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 15,
-                                                  color: Colors.black87,
-                                                ),
-                                              ),
-                                              Container(
-                                                padding: EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 4,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: getColorEstado(e['estado']).withOpacity(0.1),
-                                                  borderRadius: BorderRadius.circular(10),
-                                                ),
-                                                child: Text(
-                                                  getTextoEstado(e['estado']),
-                                                  style: TextStyle(
-                                                    color: getColorEstado(e['estado']),
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w600,
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    "Emergencia #${e['incidente_id']}",
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 15,
+                                                      color: Colors.black87,
+                                                    ),
                                                   ),
-                                                ),
+                                                  Container(
+                                                    padding: EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: getColorEstado(e['estado']).withValues(alpha: 0.1),
+                                                      borderRadius: BorderRadius.circular(10),
+                                                    ),
+                                                    child: Text(
+                                                      getTextoEstado(e['estado']),
+                                                      style: TextStyle(
+                                                        color: getColorEstado(e['estado']),
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
-                                            ],
-                                          ),
-                                          SizedBox(height: 5),
-                                          Text(
-                                            "${e['marca'] ?? ''} ${e['modelo'] ?? ''} - ${e['placa'] ?? ''}",
-                                            style: TextStyle(
-                                              color: Colors.grey,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                          SizedBox(height: 3),
-                                          Row(
-                                            children: [
-                                              Icon(Icons.calendar_today,
-                                                  size: 12, color: Colors.grey),
-                                              SizedBox(width: 4),
+                                              SizedBox(height: 5),
                                               Text(
-                                                formatearFecha(e['fecha_creacion'].toString()),
+                                                "${e['marca'] ?? ''} ${e['modelo'] ?? ''} - ${e['placa'] ?? ''}",
                                                 style: TextStyle(
                                                   color: Colors.grey,
                                                   fontSize: 12,
                                                 ),
                                               ),
+                                              SizedBox(height: 3),
+                                              Row(
+                                                children: [
+                                                  Icon(Icons.calendar_today,
+                                                      size: 12, color: Colors.grey),
+                                                  SizedBox(width: 4),
+                                                  Text(
+                                                    formatearFecha(e['fecha_creacion'].toString()),
+                                                    style: TextStyle(
+                                                      color: Colors.grey,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                             ],
                                           ),
-                                        ],
-                                      ),
+                                        ),
+
+                                        Icon(Icons.arrow_forward_ios,
+                                            size: 16, color: Colors.grey),
+                                      ],
                                     ),
 
-                                    Icon(Icons.arrow_forward_ios,
-                                        size: 16, color: Colors.grey),
+                                    // BOTÓN VALORAR (solo servicios finalizados)
+                                    if (_esServicioFinalizado(e['estado'])) ...[
+                                      SizedBox(height: 12),
+                                      Divider(height: 1, color: Colors.grey.shade200),
+                                      SizedBox(height: 12),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        height: 38,
+                                        child: ElevatedButton.icon(
+                                          onPressed: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => CalificacionScreen(
+                                                  incidenteId: e['incidente_id'],
+                                                  tallerNombre: e['taller_nombre'] as String?,
+                                                  tipoProblema: e['tipo_problema'] as String?,
+                                                  fechaCreacion: e['fecha_creacion']?.toString(),
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          icon: Icon(Icons.star_border_rounded, size: 18),
+                                          label: Text('Valorar servicio',
+                                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Color(0xFF5cbdb9),
+                                            foregroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(10)),
+                                            elevation: 0,
+                                            padding: EdgeInsets.symmetric(horizontal: 12),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
