@@ -6,6 +6,7 @@ import 'registro_screen.dart';
 import '../services/cliente_service.dart';
 import '../services/session_service.dart';
 import 'login_tecnico_screen.dart';
+import '../services/notification_service.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -50,6 +51,9 @@ void login() async {
       email: data['user']['email'],
       token: data['access_token'],
     );
+
+    // Registrar token FCM para notificaciones push
+    await NotificationService.registrarToken();
 
     Navigator.pushReplacement(
       context,

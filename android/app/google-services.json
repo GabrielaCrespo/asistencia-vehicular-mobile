@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1071893055653",
+    "project_id": "asistencia-vehicular-bd3a4",
+    "storage_bucket": "asistencia-vehicular-bd3a4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1071893055653:android:d4f5d624f97b26b2cde54c",
+        "android_client_info": {
+          "package_name": "com.example.mobile_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC8DLrcrZjr4bwCUQpm3qksS4m3tnfrB54"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
