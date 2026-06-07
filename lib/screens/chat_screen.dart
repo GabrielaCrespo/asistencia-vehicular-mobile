@@ -7,12 +7,10 @@ import '../services/session_service.dart';
 class ChatScreen extends StatefulWidget {
   final int incidenteId;
   final String otroNombre;
-  final WebSocketChannel? channel;
 
   ChatScreen({
     required this.incidenteId,
     required this.otroNombre,
-    this.channel,
   });
 
   @override
@@ -26,12 +24,20 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _cargando = true;
   int _usuarioId = 0;
   String _token = '';
+  WebSocketChannel? _chatChannel;
 
   @override
   void initState() {
     super.initState();
     _cargarSesionYMensajes();
-    _escucharWebSocket();
+  }
+
+  @override
+  void dispose() {
+    _chatChannel?.sink.close();
+    _mensajeController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   void _cargarSesionYMensajes() async {
@@ -39,6 +45,48 @@ class _ChatScreenState extends State<ChatScreen> {
     _usuarioId = sesion['usuario_id'] ?? 0;
     _token = sesion['token'] ?? '';
     await _cargarMensajes();
+    _conectarWebSocket();
+  }
+
+  void _conectarWebSocket() {
+    if (_token.isEmpty) return;
+    try {
+      _chatChannel = WebSocketChannel.connect(
+        Uri.parse('wss://asistencia-vehicular-backend.onrender.com/ws?token=$_token'),
+      );
+      _chatChannel!.stream.listen(
+        (mensaje) {
+          try {
+            final data = jsonDecode(mensaje);
+            if (data['tipo'] == 'pong' || data['tipo'] == 'conexion_establecida') return;
+            if (data['tipo'] == 'chat_mensaje' &&
+                data['incidente_id'] == widget.incidenteId) {
+              if (mounted) {
+                setState(() {
+                  _mensajes.add(Map<String, dynamic>.from(data));
+                });
+                _scrollAlFinal();
+              }
+            }
+          } catch (e) {}
+        },
+        onDone: () {
+          if (mounted) {
+            Future.delayed(Duration(seconds: 5), _conectarWebSocket);
+          }
+        },
+        onError: (_) {},
+      );
+
+      // Ping cada 30s para mantener conexión viva
+      Stream.periodic(Duration(seconds: 30)).listen((_) {
+        if (_chatChannel != null && mounted) {
+          _chatChannel!.sink.add('ping');
+        }
+      });
+    } catch (e) {
+      print('[Chat WS] Error: $e');
+    }
   }
 
   Future<void> _cargarMensajes() async {
@@ -49,30 +97,19 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        setState(() {
-          _mensajes = List<Map<String, dynamic>>.from(data['mensajes']);
-          _cargando = false;
-        });
-        _scrollAlFinal();
-      }
-    } catch (e) {
-      setState(() => _cargando = false);
-    }
-  }
-
-  void _escucharWebSocket() {
-    widget.channel?.stream.listen((mensaje) {
-      try {
-        final data = jsonDecode(mensaje);
-        if (data['tipo'] == 'chat_mensaje' &&
-            data['incidente_id'] == widget.incidenteId) {
+        if (mounted) {
           setState(() {
-            _mensajes.add(Map<String, dynamic>.from(data));
+            _mensajes = List<Map<String, dynamic>>.from(data['mensajes']);
+            _cargando = false;
           });
           _scrollAlFinal();
         }
-      } catch (e) {}
-    });
+      } else {
+        if (mounted) setState(() => _cargando = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _cargando = false);
+    }
   }
 
   void _scrollAlFinal() {
@@ -91,7 +128,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final texto = _mensajeController.text.trim();
     if (texto.isEmpty) return;
 
-    // Agregar mensaje localmente
     setState(() {
       _mensajes.add({
         'usuario_id': _usuarioId,
@@ -102,8 +138,7 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     });
 
-    // Enviar por WebSocket
-    widget.channel?.sink.add(jsonEncode({
+    _chatChannel?.sink.add(jsonEncode({
       'tipo': 'chat_mensaje',
       'incidente_id': widget.incidenteId,
       'mensaje': texto,
@@ -143,7 +178,6 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Column(
         children: [
-          // MENSAJES
           Expanded(
             child: _cargando
                 ? Center(child: CircularProgressIndicator())
@@ -156,7 +190,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             SizedBox(height: 10),
                             Text("No hay mensajes aún",
                                 style: TextStyle(color: Colors.grey, fontSize: 14)),
-                            Text("Envía un mensaje al técnico",
+                            Text("Envía un mensaje",
                                 style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
                           ],
                         ),
@@ -172,8 +206,6 @@ class _ChatScreenState extends State<ChatScreen> {
                         },
                       ),
           ),
-
-          // INPUT
           Container(
             padding: EdgeInsets.symmetric(horizontal: 15, vertical: 10),
             decoration: BoxDecoration(

@@ -245,7 +245,6 @@ class _SeguimientoScreenState extends State<SeguimientoScreen> {
                   builder: (_) => ChatScreen(
                     incidenteId: widget.incidenteId,
                     otroNombre: incidente!['taller_nombre'] ?? 'Técnico',
-                    channel: _channel,
                   ),
                 ),
               ),
