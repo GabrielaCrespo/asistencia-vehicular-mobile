@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../services/session_service.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:path_provider/path_provider.dart';
 
 class ReporteScreen extends StatefulWidget {
   final int tallerId;
@@ -15,9 +17,11 @@ class ReporteScreen extends StatefulWidget {
 class _ReporteScreenState extends State<ReporteScreen>
     with SingleTickerProviderStateMixin {
   final String baseUrl =
-      'https://asistencia-vehicular-backend.onrender.com/api/reportes';
+    'https://asistencia-vehicular-backend.onrender.com/api/reportes/tecnico';
   String _token = '';
   int _tallerIdTecnico = 0;
+  bool _exportando = false;
+  String _tipoReporteVoz = 'historial-servicios';
 
   // Pestañas
   late TabController _tabController;
@@ -99,14 +103,27 @@ class _ReporteScreenState extends State<ReporteScreen>
     super.dispose();
   }
 
+  // ── FIX BUG 3: esperar que el token esté listo antes de llamar _cargarReporte ──
   void _cargarSesion() async {
     final sesion = await SessionService.getSesion();
+    final token = sesion['token'] ?? '';
+    final tallerId = widget.tallerId;
+
     setState(() {
-      _token = sesion['token'] ?? '';
-      _tallerIdTecnico = widget.tallerId;
+      _token = token;
+      _tallerIdTecnico = tallerId;
     });
-    print('=== DEBUG: tallerId=${widget.tallerId}, token=$_token');
-    _cargarReporte();
+
+    print('=== DEBUG: tallerId=$tallerId, token=$token');
+
+    // Solo cargar si el token no está vacío
+    if (token.isNotEmpty) {
+      _cargarReporte();
+    } else {
+      setState(() {
+        _errorEstatico = 'Sesión no válida. Vuelve a iniciar sesión.';
+      });
+    }
   }
 
   void _inicializarVoz() async {
@@ -121,6 +138,9 @@ class _ReporteScreenState extends State<ReporteScreen>
   }
 
   // ── REPORTE ESTÁTICO ──────────────────────────────────
+  // ── FIX BUG 1: el taller_id viene del token JWT en el backend (SaaS),
+  //    pero igual lo mandamos como param por si el endpoint lo acepta.
+  //    Además manejamos mejor los errores con el status code real. ──
   void _cargarReporte() async {
     if (_token.isEmpty) return;
     setState(() {
@@ -131,37 +151,77 @@ class _ReporteScreenState extends State<ReporteScreen>
     });
 
     try {
-      final params = <String, String>{'taller_id': _tallerIdTecnico.toString()};
+      final params = <String, String>{};
+      // Solo agregamos taller_id si el backend lo acepta como query param
+      if (_tallerIdTecnico > 0) {
+        params['taller_id'] = _tallerIdTecnico.toString();
+      }
       if (_fechaDesde.isNotEmpty) params['fecha_desde'] = _fechaDesde;
       if (_fechaHasta.isNotEmpty) params['fecha_hasta'] = _fechaHasta;
 
       final uri = Uri.parse(
         '$baseUrl/$_tipoReporte',
       ).replace(queryParameters: params);
+
+      print('=== DEBUG GET: $uri');
+
       final response = await http.get(
         uri,
         headers: {'Authorization': 'Bearer $_token'},
       );
 
+      print('=== DEBUG status: ${response.statusCode}');
+      print('=== DEBUG body: ${response.body}');
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        // El backend puede devolver datos en diferentes claves según el reporte
         final rawFilas = List<Map<String, dynamic>>.from(
-          data['datos'] ?? data['por_taller'] ?? [],
+          data['datos'] ??
+              data['por_taller'] ??
+              data['servicios'] ??
+              data['calificaciones'] ??
+              data['kpis'] ??
+              data['incidentes'] ??
+              [],
         );
         setState(() {
           _filas = rawFilas;
           _resumen = Map<String, dynamic>.from(data['resumen'] ?? {});
           _cargandoEstatico = false;
         });
-      } else {
+      } else if (response.statusCode == 401) {
         setState(() {
-          _errorEstatico = 'Error al cargar el reporte';
+          _errorEstatico = 'Sesión expirada. Vuelve a iniciar sesión.';
+          _cargandoEstatico = false;
+        });
+      } else if (response.statusCode == 403) {
+        setState(() {
+          _errorEstatico = 'No tienes permiso para ver este reporte.';
+          _cargandoEstatico = false;
+        });
+      } else if (response.statusCode == 404) {
+        setState(() {
+          _errorEstatico = 'Reporte no encontrado.';
+          _cargandoEstatico = false;
+        });
+      } else {
+        // Intentamos leer el mensaje de error del backend
+        String mensajeError = 'Error al cargar el reporte';
+        try {
+          final errData = jsonDecode(response.body);
+          mensajeError =
+              errData['detail'] ?? errData['message'] ?? mensajeError;
+        } catch (_) {}
+        setState(() {
+          _errorEstatico = mensajeError;
           _cargandoEstatico = false;
         });
       }
     } catch (e) {
+      print('=== DEBUG error: $e');
       setState(() {
-        _errorEstatico = 'Error de conexión';
+        _errorEstatico = 'Error de conexión. Verifica tu internet.';
         _cargandoEstatico = false;
       });
     }
@@ -192,6 +252,8 @@ class _ReporteScreenState extends State<ReporteScreen>
     }
   }
 
+  // ── FIX BUG 2: el endpoint /voz espera 'consulta' o 'texto' + taller_id correcto.
+  //    Mandamos ambos por compatibilidad y logueamos la respuesta completa. ──
   void _enviarConsulta() async {
     final texto = _consultaController.text.trim();
     if (texto.isEmpty) return;
@@ -205,39 +267,256 @@ class _ReporteScreenState extends State<ReporteScreen>
     });
 
     try {
+      final body = {
+        'texto': texto, // campo original
+        'consulta': texto, // algunos backends usan 'consulta'
+        'taller_id': _tallerIdTecnico,
+      };
+
+      print('=== DEBUG VOZ POST body: ${jsonEncode(body)}');
+
       final response = await http.post(
         Uri.parse('$baseUrl/voz'),
         headers: {
           'Authorization': 'Bearer $_token',
           'Content-Type': 'application/json',
         },
-        body: jsonEncode({'texto': texto, 'taller_id': _tallerIdTecnico}),
+        body: jsonEncode(body),
       );
+
+      print('=== DEBUG VOZ status: ${response.statusCode}');
+      print('=== DEBUG VOZ body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final r = data['resultado'] ?? {};
+
+        // El backend puede devolver resultado directo o anidado en 'resultado'
+        final r = data['resultado'] ?? data;
+
         final rawFilas = List<Map<String, dynamic>>.from(
-          r['datos'] ?? r['por_taller'] ?? [],
+          r['datos'] ??
+              r['por_taller'] ??
+              r['servicios'] ??
+              r['calificaciones'] ??
+              r['kpis'] ??
+              r['incidentes'] ??
+              [],
         );
+
         setState(() {
           _filasVoz = rawFilas;
           _resumenVoz = Map<String, dynamic>.from(r['resumen'] ?? {});
-          _mensajeConfirmacion = data['mensaje_confirmacion'];
+          // Mensaje de confirmación: puede venir en distintas claves
+          _mensajeConfirmacion =
+              data['mensaje_confirmacion'] ??
+              data['mensaje'] ??
+              data['message'] ??
+              'Reporte generado correctamente';
+          _tipoReporteVoz = data['tipo_reporte'] ?? 'historial-servicios';
+          _procesandoVoz = false;
+        });
+      } else if (response.statusCode == 401) {
+        setState(() {
+          _errorVoz = 'Sesión expirada. Vuelve a iniciar sesión.';
+          _procesandoVoz = false;
+        });
+      } else if (response.statusCode == 422) {
+        // Error de validación — el backend rechaza el body
+        String detalle = 'Consulta no válida';
+        try {
+          final errData = jsonDecode(response.body);
+          // FastAPI devuelve errores 422 con estructura {"detail": [...]}
+          final detail = errData['detail'];
+          if (detail is List && detail.isNotEmpty) {
+            detalle = detail.map((e) => e['msg'] ?? e.toString()).join(', ');
+          } else if (detail is String) {
+            detalle = detail;
+          }
+        } catch (_) {}
+        setState(() {
+          _errorVoz = detalle;
           _procesandoVoz = false;
         });
       } else {
+        String mensajeError = 'No se pudo interpretar la consulta';
+        try {
+          final errData = jsonDecode(response.body);
+          mensajeError =
+              errData['detail'] ?? errData['message'] ?? mensajeError;
+        } catch (_) {}
         setState(() {
-          _errorVoz = 'No se pudo interpretar la consulta';
+          _errorVoz = mensajeError;
           _procesandoVoz = false;
         });
       }
     } catch (e) {
+      print('=== DEBUG VOZ error: $e');
       setState(() {
-        _errorVoz = 'Error de conexión';
+        _errorVoz = 'Error de conexión. Verifica tu internet.';
         _procesandoVoz = false;
       });
     }
+  }
+
+  // ── EXPORTAR ──────────────────────────────────────────
+  void _exportar(String formato, {bool esVoz = false}) async {
+    final tipo = esVoz ? _tipoReporteVoz : _tipoReporte;
+    setState(() => _exportando = true);
+
+    try {
+      final params = <String, String>{'tipo': tipo, 'formato': formato};
+      if (_fechaDesde.isNotEmpty) params['fecha_desde'] = _fechaDesde;
+      if (_fechaHasta.isNotEmpty) params['fecha_hasta'] = _fechaHasta;
+
+      final uri = Uri.parse(
+        '$baseUrl/exportar',
+      ).replace(queryParameters: params);
+      final response = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer $_token'},
+      );
+
+      if (response.statusCode == 200) {
+        // Guardar archivo en descargas del dispositivo
+        final ext = formato == 'excel' ? 'xlsx' : formato;
+        final nombreArchivo =
+            'reporte_${tipo}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+
+        // Usar path_provider para guardar
+        final dir = await _getDownloadDir();
+        final file = File('$dir/$nombreArchivo');
+        await file.writeAsBytes(response.bodyBytes);
+
+        setState(() => _exportando = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Guardado: $nombreArchivo'),
+              backgroundColor: Color(0xFF15803d),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+      } else {
+        setState(() => _exportando = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al exportar'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() => _exportando = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<String> _getDownloadDir() async {
+    try {
+      // path_provider — funciona en Android 10+
+      final dir = await getExternalStorageDirectory();
+      if (dir != null) {
+        // Subir niveles hasta llegar a /Downloads
+        final parts = dir.path.split('/');
+        final androidIdx = parts.indexOf('Android');
+        if (androidIdx > 0) {
+          return '${parts.sublist(0, androidIdx).join('/')}/Download';
+        }
+        return dir.path;
+      }
+    } catch (_) {}
+    return '/sdcard/Download';
+  }
+
+  Widget _buildBotonExportar({bool esVoz = false}) {
+    final tienedatos = esVoz ? _filasVoz.isNotEmpty : _filas.isNotEmpty;
+    if (!tienedatos) return SizedBox.shrink();
+    return PopupMenuButton<String>(
+      onSelected: (fmt) => _exportar(fmt, esVoz: esVoz),
+      enabled: !_exportando,
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: 'pdf',
+          child: Row(
+            children: [
+              Icon(
+                Icons.picture_as_pdf_rounded,
+                color: Color(0xFFdc2626),
+                size: 18,
+              ),
+              SizedBox(width: 8),
+              Text('Exportar PDF'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'excel',
+          child: Row(
+            children: [
+              Icon(
+                Icons.table_chart_rounded,
+                color: Color(0xFF15803d),
+                size: 18,
+              ),
+              SizedBox(width: 8),
+              Text('Exportar Excel'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'csv',
+          child: Row(
+            children: [
+              Icon(
+                Icons.description_rounded,
+                color: Color(0xFF2563eb),
+                size: 18,
+              ),
+              SizedBox(width: 8),
+              Text('Exportar CSV'),
+            ],
+          ),
+        ),
+      ],
+      child: _exportando
+          ? SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : Container(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Color(0xFF0f766e),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.download_rounded, color: Colors.white, size: 18),
+                  SizedBox(width: 4),
+                  Text(
+                    'Exportar',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+    );
   }
 
   // ── BUILD ─────────────────────────────────────────────
@@ -282,7 +561,6 @@ class _ReporteScreenState extends State<ReporteScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Selector de tipo
           Text(
             'Tipo de reporte',
             style: TextStyle(
@@ -361,7 +639,6 @@ class _ReporteScreenState extends State<ReporteScreen>
 
           SizedBox(height: 16),
 
-          // Filtros de fecha
           Container(
             padding: EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -403,23 +680,30 @@ class _ReporteScreenState extends State<ReporteScreen>
                   ],
                 ),
                 SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _cargandoEstatico ? null : _cargarReporte,
-                    icon: Icon(Icons.search_rounded, size: 18),
-                    label: Text(
-                      _cargandoEstatico ? 'Generando...' : 'Generar reporte',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Color(0xFF5cbdb9),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _cargandoEstatico ? null : _cargarReporte,
+                        icon: Icon(Icons.search_rounded, size: 18),
+                        label: Text(
+                          _cargandoEstatico
+                              ? 'Generando...'
+                              : 'Generar reporte',
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Color(0xFF5cbdb9),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                        ),
                       ),
-                      padding: EdgeInsets.symmetric(vertical: 12),
                     ),
-                  ),
+                    SizedBox(width: 8),
+                    _buildBotonExportar(esVoz: false),
+                  ],
                 ),
               ],
             ),
@@ -427,7 +711,6 @@ class _ReporteScreenState extends State<ReporteScreen>
 
           SizedBox(height: 16),
 
-          // Resultados
           if (_cargandoEstatico)
             Center(
               child: Padding(
@@ -516,7 +799,6 @@ class _ReporteScreenState extends State<ReporteScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Panel de voz
           Container(
             padding: EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -531,7 +813,6 @@ class _ReporteScreenState extends State<ReporteScreen>
             ),
             child: Column(
               children: [
-                // Botón micrófono
                 GestureDetector(
                   onTap: _toggleGrabacion,
                   child: AnimatedContainer(
@@ -573,7 +854,6 @@ class _ReporteScreenState extends State<ReporteScreen>
 
                 SizedBox(height: 16),
 
-                // Campo de texto editable
                 TextField(
                   controller: _consultaController,
                   onChanged: (v) => _textoConsulta = v,
@@ -602,7 +882,6 @@ class _ReporteScreenState extends State<ReporteScreen>
 
                 SizedBox(height: 14),
 
-                // Ejemplos
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
@@ -654,7 +933,6 @@ class _ReporteScreenState extends State<ReporteScreen>
 
           SizedBox(height: 16),
 
-          // Resultados voz
           if (_procesandoVoz)
             Center(
               child: Padding(
@@ -689,6 +967,11 @@ class _ReporteScreenState extends State<ReporteScreen>
               ),
             ),
             SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [_buildBotonExportar(esVoz: true)],
+            ),
+            SizedBox(height: 8),
             if (_resumenVoz.isNotEmpty) _buildResumen(_resumenVoz),
             SizedBox(height: 12),
             if (_filasVoz.isNotEmpty) _buildTabla(_filasVoz),
