@@ -8,12 +8,14 @@ class SessionService {
     required String nombre,
     required String email,
     required String token,
+    int? tallerId,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('usuario_id', usuarioId);
     await prefs.setString('nombre', nombre);
     await prefs.setString('email', email);
     await prefs.setString('token', token);
+    if (tallerId != null) await prefs.setInt('taller_id', tallerId);
   }
 
   // Obtener datos de la sesión
@@ -24,6 +26,7 @@ class SessionService {
       'nombre': prefs.getString('nombre'),
       'email': prefs.getString('email'),
       'token': prefs.getString('token'),
+      'taller_id': prefs.getInt('taller_id'),
     };
   }
 

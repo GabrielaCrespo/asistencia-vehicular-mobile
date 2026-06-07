@@ -3,6 +3,7 @@ import '../services/tecnico_service.dart';
 import '../services/session_service.dart';
 import 'login_tecnico_screen.dart';
 import 'tecnico_asignacion_screen.dart';
+import 'reporte_screen.dart';
 
 class TecnicoHomeScreen extends StatefulWidget {
   final int tecnicoId;
@@ -71,7 +72,6 @@ class _TecnicoHomeScreenState extends State<TecnicoHomeScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-
             // HEADER
             Container(
               width: double.infinity,
@@ -106,7 +106,10 @@ class _TecnicoHomeScreenState extends State<TecnicoHomeScreen> {
                           ),
                           Text(
                             widget.tallerNombre,
-                            style: TextStyle(color: Colors.white70, fontSize: 13),
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                            ),
                           ),
                         ],
                       ),
@@ -136,159 +139,181 @@ class _TecnicoHomeScreenState extends State<TecnicoHomeScreen> {
             cargando
                 ? Center(child: CircularProgressIndicator())
                 : asignacion == null
-                    ? Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 20),
-                        child: Container(
-                          width: double.infinity,
-                          padding: EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(15),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 10,
-                              ),
-                            ],
+                ? Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    child: Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(15),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
                           ),
-                          child: Column(
-                            children: [
-                              Icon(Icons.inbox, size: 50, color: Colors.grey),
-                              SizedBox(height: 10),
-                              Text(
-                                "Sin asignaciones activas",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                              Text(
-                                "Espera que el taller te asigne un servicio",
-                                style: TextStyle(color: Colors.grey, fontSize: 12),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 20),
-                        child: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => TecnicoAsignacionScreen(
-                                  asignacion: asignacion!,
-                                  tallerId: widget.tallerId,
-                                  onActualizar: cargarAsignacion,
-                                ),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            width: double.infinity,
-                            padding: EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(15),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 10,
-                                ),
-                              ],
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(Icons.inbox, size: 50, color: Colors.grey),
+                          SizedBox(height: 10),
+                          Text(
+                            "Sin asignaciones activas",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          ),
+                          Text(
+                            "Espera que el taller te asigne un servicio",
+                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => TecnicoAsignacionScreen(
+                              asignacion: asignacion!,
+                              tallerId: widget.tallerId,
+                              onActualizar: cargarAsignacion,
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(15),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 10,
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      "Servicio #${asignacion!['asignacion_id']}",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                      decoration: BoxDecoration(
-                                        color: Colors.orange.shade50,
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Text(
-                                        asignacion!['estado'].toString().toUpperCase(),
-                                        style: TextStyle(
-                                          color: Colors.orange,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: 10),
                                 Text(
-                                  asignacion!['descripcion'] ?? '',
-                                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                                  "Servicio #${asignacion!['asignacion_id']}",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: Colors.black87,
+                                  ),
                                 ),
-                                SizedBox(height: 10),
-                                Row(
-                                  children: [
-                                    Icon(Icons.person, size: 14, color: Colors.grey),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      asignacion!['cliente_nombre'] ?? '',
-                                      style: TextStyle(color: Colors.grey, fontSize: 13),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: 5),
-                                Row(
-                                  children: [
-                                    Icon(Icons.directions_car, size: 14, color: Colors.grey),
-                                    SizedBox(width: 4),
-                                    Text(
-                                      "${asignacion!['marca']} ${asignacion!['modelo']} - ${asignacion!['placa']}",
-                                      style: TextStyle(color: Colors.grey, fontSize: 13),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: 15),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => TecnicoAsignacionScreen(
-                                            asignacion: asignacion!,
-                                            tallerId: widget.tallerId,
-                                            onActualizar: cargarAsignacion,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Color(0xFF1A237E),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      "Ver detalle",
-                                      style: TextStyle(color: Colors.white),
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.shade50,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    asignacion!['estado']
+                                        .toString()
+                                        .toUpperCase(),
+                                    style: TextStyle(
+                                      color: Colors.orange,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ),
                               ],
                             ),
-                          ),
+                            SizedBox(height: 10),
+                            Text(
+                              asignacion!['descripcion'] ?? '',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 13,
+                              ),
+                            ),
+                            SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.person,
+                                  size: 14,
+                                  color: Colors.grey,
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  asignacion!['cliente_nombre'] ?? '',
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 5),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.directions_car,
+                                  size: 14,
+                                  color: Colors.grey,
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  "${asignacion!['marca']} ${asignacion!['modelo']} - ${asignacion!['placa']}",
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 15),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => TecnicoAsignacionScreen(
+                                        asignacion: asignacion!,
+                                        tallerId: widget.tallerId,
+                                        onActualizar: cargarAsignacion,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Color(0xFF1A237E),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                                child: Text(
+                                  "Ver detalle",
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+                    ),
+                  ),
 
             SizedBox(height: 20),
 
@@ -308,6 +333,34 @@ class _TecnicoHomeScreenState extends State<TecnicoHomeScreen> {
                     padding: EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            SizedBox(height: 10),
+
+            // BOTON REPORTES
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => ReporteScreen(tallerId: widget.tallerId),),
+                  ),
+                  icon: Icon(Icons.bar_chart_rounded, color: Colors.white),
+                  label: Text(
+                    "Mis Reportes",
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Color(0xFF5cbdb9),
+                    padding: EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
                 ),
