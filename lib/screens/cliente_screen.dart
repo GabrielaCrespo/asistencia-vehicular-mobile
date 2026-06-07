@@ -199,11 +199,28 @@ class _ClienteScreenState extends State<ClienteScreen> {
             style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
         centerTitle: true,
         actions: [
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.refresh, size: 20, color: Colors.black54),
+              onPressed: cargarSesion,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              tooltip: 'Actualizar',
+            ),
+          ),
           IconButton(icon: Icon(Icons.logout, color: Colors.grey), onPressed: cerrarSesion),
         ],
       ),
 
-      body: SingleChildScrollView(
+      body: RefreshIndicator(
+        onRefresh: () async => cargarSesion(),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -567,6 +584,7 @@ class _ClienteScreenState extends State<ClienteScreen> {
           ],
         ),
       ),
+    ),
 
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: Colors.white,
