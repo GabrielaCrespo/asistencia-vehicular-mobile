@@ -588,7 +588,6 @@ class _TecnicoAsignacionScreenState extends State<TecnicoAsignacionScreen> {
                                 otroNombre:
                                     widget.asignacion['cliente_nombre'] ??
                                     'Cliente',
-                                channel: _channel,
                               ),
                             ),
                           ),
